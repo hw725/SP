@@ -1,0 +1,7 @@
+pandas
+numpy
+regex
+torch
+sentence-transformers
+tqdm
+openpyxl
