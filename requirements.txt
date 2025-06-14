@@ -1,11 +1,12 @@
-pandas>=1.5,<2.2
-numpy>=1.23,<1.27
-regex>=2022.10.31
-torch>=2.0.0
-sentence-transformers>=2.2.2
-tqdm>=4.64
-openpyxl>=3.1
-spacy>=3.7,<3.9
-
-# 한국어 모델은 requirements로 지정하지 않고 별도 설치 권장
-# 설치 방법: python -m spacy download ko_core_news_lg
+# Install necessary packages (GPU version with CUDA 12.1)
+regex
+pandas
+numpy
+tqdm
+openpyxl
+soynlp
+torch
+torchvision
+torchaudio --index-url https://download.pytorch.org/whl/cu121
+sentence-transformers
+FlagEmbedding
