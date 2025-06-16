@@ -7,10 +7,12 @@
 - 벡터 임베더 : bge-m3 등
 - tokenizers.py, embedders.py에 여러 라이브러리를 클래스로 추가해서 교체 가능
 ```
-  venv/scripts/activate # window
-  pip install -r requirements.txt # pip install --upgrade pip
+  venv/scripts/activate
+    # window
+  pip install -r requirements.txt
+    # pip install --upgrade pip 필요할 수 있음
   python main.py input_s.xlsx output_s.xlsx --parallel --workers 4
-  # 메모리가 부족하면 workers 수를 낮출 것
+    # 메모리가 부족하면 workers 수를 낮출 것
 ```
 
 ### PA : Paragraph Aligner
