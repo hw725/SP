@@ -6,9 +6,10 @@
 - 토크나이저 : mecab, jieba 등
 - 벡터 임베더 : bge-m3 등
 - tokenizers.py, embedders.py에 여러 라이브러리를 클래스로 추가해서 교체 가능
+- 실행 순서
 ```
   venv/scripts/activate
-    # window
+    # 가상 환경 활성화(권장) window 기준
   pip install -r requirements.txt
     # pip install --upgrade pip 필요할 수 있음
   python main.py input_s.xlsx output_s.xlsx --parallel --workers 4
