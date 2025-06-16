@@ -9,6 +9,7 @@ import regex # 사용되지 않으면 제거 가능
 from abc import ABC, abstractmethod
 from typing import List, Dict, Tuple, Any, Type, Optional, Callable
 import os # os.path.join 사용 위함
+from .utils import TextMasker # preprocessor 대신 utils에서 가져오기
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +132,11 @@ def get_aligner(aligner_type: str, **kwargs) -> BaseAligner:
     
     aligner_class = registry[aligner_type]
     return aligner_class(**kwargs)
+
+def get_text_masker(**kwargs) -> TextMasker:
+    """TextMasker 인스턴스를 반환합니다."""
+    # TextMasker 초기화 시 필요한 인자가 있다면 kwargs를 통해 전달될 수 있습니다.
+    # 예를 들어, TextMasker가 특정 설정을 받는다면:
+    # return TextMasker(config=kwargs) 또는 return TextMasker(**kwargs)
+    # 현재 TextMasker가 별도 설정을 받지 않는다면:
+    return TextMasker(**kwargs) # kwargs를 그대로 전달하여 유연성 확보

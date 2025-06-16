@@ -221,4 +221,29 @@ def split_tgt_meaning_units(
         default_embedding_dim=default_embedding_dim
     )
 
+class TextMasker:
+    """텍스트 마스킹/언마스킹을 처리하는 클래스"""
+    
+    def __init__(self, **kwargs):
+        # 필요한 설정이 있다면 여기서 처리
+        pass
+    
+    def mask(self, text: str, text_type: str = "source") -> tuple:
+        """텍스트 마스킹 (기존 mask_brackets 함수 사용)"""
+        return mask_brackets(text, text_type)
+    
+    def unmask(self, text: str, mask_map: dict, unmask_type: str = 'original') -> str:
+        """텍스트 언마스킹"""
+        if unmask_type == 'original':
+            return restore_masks(text, mask_map)
+        elif unmask_type == 'remove_all_parentheses':
+            # 마스킹된 부분을 완전히 제거
+            result = text
+            for mask_key in mask_map.keys():
+                result = result.replace(mask_key, '')
+            return result
+        else:
+            # 기본적으로 원본 복원
+            return restore_masks(text, mask_map)
+
 

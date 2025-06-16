@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional # Optional 추가
 import logging # logging 추가
+import yaml
 
 logger = logging.getLogger(__name__) # 로거 추가
 
@@ -63,3 +64,30 @@ class Config:
 
         # frozen=True이므로 object.__setattr__을 사용하여 수정된 config 반영
         object.__setattr__(self, 'embedder_config', final_embedder_config)
+
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> 'Config':
+        """YAML 파일에서 설정을 로드합니다."""
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                config_data = yaml.safe_load(f)
+            return cls.from_dict(config_data)
+        except Exception as e:
+            logger.error(f"YAML 설정 파일 로드 중 오류: {e}")
+            raise
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
+        """딕셔너리에서 Config 객체를 생성합니다."""
+        # 알려진 필드만 추출
+        known_fields = {f.name for f in cls.__dataclass_fields__}
+        filtered_dict = {k: v for k, v in config_dict.items() if k in known_fields}
+        return cls(**filtered_dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Config 객체를 딕셔너리로 변환합니다."""
+        result = {}
+        for field_name, field_def in self.__dataclass_fields__.items():
+            value = getattr(self, field_name)
+            result[field_name] = value
+        return result
