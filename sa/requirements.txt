@@ -6,6 +6,7 @@ tqdm
 openpyxl
 soynlp
 jieba
+mecab_ko
 mecab-ko-msvc
 mecab-ko-dic-msvc
 # torch==2.6.0 # 이전 라인 주석 처리 또는 삭제
@@ -18,3 +19,13 @@ transformers
 FlagEmbedding
 openai
 sentence-transformers
+
+# Jupyter, IPython, ipykernel 및 필수 의존성
+jupyterlab
+ipykernel
+ipython
+comm
+debugpy
+nest-asyncio
+jedi
+prompt_toolkit
