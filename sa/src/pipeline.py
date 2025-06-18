@@ -3,10 +3,11 @@ import logging
 import pandas as pd
 import numpy as np  # ✅ 추가
 from typing import Dict, Any, List, Optional
-import re  # ✅ 정규 표현식 모듈 추가
+import re
 
-from .components import BaseTokenizer, BaseEmbedder, BaseAligner
-from .utils import (
+# from .components import BaseTokenizer, BaseEmbedder, BaseAligner # BaseAligner 제거
+from .components import BaseTokenizer, BaseEmbedder # 수정된 import
+from .text_alignment import (
     mask_brackets, restore_masks, 
     split_src_meaning_units, split_tgt_meaning_units  # ✅ 복원된 함수 호출 확인
 )
@@ -26,9 +27,9 @@ def process_single_row(
     source_tokenizer: BaseTokenizer,
     target_tokenizer: BaseTokenizer,
     embedder: BaseEmbedder,
-    aligner: BaseAligner,
+    # aligner: BaseAligner,  # 이 줄은 이미 주석 처리되어 있음 (좋음)
 ) -> Dict[str, Any]:
-    """단일 행 처리 - 통합된 단일 함수"""
+    """단일 행 처리 - aligner 파라미터 제거"""
     
     src_text = str(row_data.get('원문', ''))
     tgt_text = str(row_data.get('번역문', ''))
@@ -47,7 +48,10 @@ def process_single_row(
         # 1. 마스킹
         masked_src, src_masks = mask_brackets(src_text, text_type="source")
         masked_tgt, tgt_masks = mask_brackets(tgt_text, text_type="target")
+        # 추가: 마스킹 맵 저장
         processing_info['masking'] = 'success'
+        processing_info['masking_map_source'] = src_masks
+        processing_info['masking_map_target'] = tgt_masks
 
         # 2. embed_func 생성
         embed_func = _create_embed_func(embedder)
@@ -85,15 +89,13 @@ def process_single_row(
         logger.debug(f"Source units ({len(src_units)}): {src_units}")
         logger.debug(f"Target units ({len(tgt_units)}): {tgt_units}")
 
-        # 5. 정렬
-        aligned_pairs = aligner.align(src_units, tgt_units, embed_func)
-        processing_info['aligned_pairs_count_raw'] = len(aligned_pairs)
-
-        final_aligned_pairs = aligned_pairs
-
-        # 6. 최종 결과 - 구조 보존하면서 조합
-        aligned_source_parts = [src for src, tgt in final_aligned_pairs]
-        aligned_target_parts = [tgt for src, tgt in final_aligned_pairs]
+        # 5. 정렬 부분 제거 (이미 split_tgt_meaning_units에서 처리됨)
+        # aligned_pairs = aligner.align(src_units, tgt_units, embed_func)  # ← 제거
+        # final_aligned_pairs = aligned_pairs  # ← 제거
+    
+        # 6. 최종 결과 - tgt_units를 바로 사용
+        aligned_source_parts = src_units
+        aligned_target_parts = tgt_units
 
         # ✅ 빈 문자열도 유지하여 구조 보존, 구분자 사용
         aligned_source_str = ' | '.join(aligned_source_parts)
@@ -111,7 +113,8 @@ def process_single_row(
         final_target = restore_masks(aligned_target_str, tgt_masks)
         
         processing_info['status'] = 'success'
-        processing_info['final_aligned_pairs_count'] = len(final_aligned_pairs)
+        # processing_info['final_aligned_pairs_count'] = len(final_aligned_pairs) # 오류 발생! final_aligned_pairs 변수가 없음
+        processing_info['final_aligned_pairs_count'] = len(aligned_source_parts) # 수정된 코드
 
         return {
             'aligned_source': final_source,
@@ -139,10 +142,12 @@ def process_dataframe(df: pd.DataFrame, components: Dict[str, Any],
     source_tokenizer = components.get('source_tokenizer')
     target_tokenizer = components.get('target_tokenizer')
     embedder = components.get('embedder') 
-    aligner = components.get('aligner')
+    # aligner = components.get('aligner') # ← 삭제
 
-    if not all([source_tokenizer, target_tokenizer, embedder, aligner]):
-        logger.error("필수 컴포넌트가 누락되었습니다: source_tokenizer, target_tokenizer, embedder, aligner")
+    # if not all([source_tokenizer, target_tokenizer, embedder, aligner]): # aligner 제거
+    if not all([source_tokenizer, target_tokenizer, embedder]): # 수정된 코드
+        # logger.error("필수 컴포넌트가 누락되었습니다: source_tokenizer, target_tokenizer, embedder, aligner") # aligner 제거
+        logger.error("필수 컴포넌트가 누락되었습니다: source_tokenizer, target_tokenizer, embedder") # 수정된 코드
         df['aligned_source'] = df['원문']
         df['aligned_target'] = df['번역문']
         df['processing_info'] = str({'error': 'Missing essential components'})
@@ -159,7 +164,7 @@ def process_dataframe(df: pd.DataFrame, components: Dict[str, Any],
                 source_tokenizer, 
                 target_tokenizer, 
                 embedder, 
-                aligner
+                # aligner # ← 삭제
             )
             merged_row = row_data_dict.copy()
             merged_row.update(processed_dict)

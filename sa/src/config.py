@@ -1,11 +1,11 @@
 # src/config.py
 import os
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional # Optional 추가
-import logging # logging 추가
+from typing import Dict, Any, Optional
 import yaml
 
-logger = logging.getLogger(__name__) # 로거 추가
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Config:
@@ -17,8 +17,7 @@ class Config:
     # 컴포넌트 타입
     source_tokenizer_type: str = "jieba"  # 원문용 토크나이저
     target_tokenizer_type: str = "mecab"  # 번역문용 토크나이저
-    embedder_type: str = "bge-m3"  # 임베더 타입 (기본 BGE-M3)
-    aligner_type: str = "strict" # 기본 정렬기 변경 가능
+    embedder_type: str = "openai"  # 임베더 타입
     
     # 컴포넌트 설정
     source_tokenizer_config: Dict[str, Any] = field(default_factory=dict)
@@ -26,12 +25,11 @@ class Config:
     embedder_config: Dict[str, Any] = field(default_factory=lambda: {
         "use_fp16": True,  # BGE-M3 기본값
     })
-    aligner_config: Dict[str, Any] = field(default_factory=dict)
     
     # 처리 옵션
     use_parallel: bool = False
-    num_workers: int = os.cpu_count() or 2 # 기본 워커 수 개선
-    chunk_size: int = 50 # 기본 청크 크기 조정
+    num_workers: int = 1
+    chunk_size: int = 100
     
     # 기타
     verbose: bool = False

@@ -1,4 +1,9 @@
 # Install necessary packages (GPU version with CUDA 12.4)
+# GPU 버전 PyTorch 설치 (CUDA 12.4)
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch
+torchvision
+
 regex
 pandas
 numpy
@@ -9,23 +14,4 @@ jieba
 mecab_ko
 mecab-ko-msvc
 mecab-ko-dic-msvc
-# torch==2.6.0 # 이전 라인 주석 처리 또는 삭제
-# torchvision==0.21.0 # 이전 라인 주석 처리 또는 삭제
-# PyTorch (GPU - CUDA 12.4)
-torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
-torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu124
-# torchaudio도 필요하다면 추가 (예: torchaudio --index-url https://download.pytorch.org/whl/cu124)
-transformers
-FlagEmbedding
-openai
-sentence-transformers
-
-# Jupyter, IPython, ipykernel 및 필수 의존성
-jupyterlab
-ipykernel
-ipython
-comm
-debugpy
-nest-asyncio
-jedi
 prompt_toolkit

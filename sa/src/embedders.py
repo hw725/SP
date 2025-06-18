@@ -1,70 +1,60 @@
-from typing import List, Optional, Dict, Any
-import numpy as np # numpy import 확인
-import hashlib
 import logging
-from pathlib import Path
+import numpy as np
+import hashlib
 import os
+from typing import List, Optional
+from pathlib import Path
+
+from .interfaces import BaseEmbedder
 
 logger = logging.getLogger(__name__)
-
-class BaseEmbedder:
-    """임베더 기본 클래스 (인터페이스 역할)"""
-    def __init__(self, **kwargs): # kwargs를 받아 하위 클래스에서 super() 호출 시 문제 없도록
-        pass
-
-    def embed(self, texts: List[str]) -> np.ndarray:
-        raise NotImplementedError("Embedder의 하위 클래스는 embed 메서드를 구현해야 합니다.")
 
 class CachedEmbedder(BaseEmbedder):
     """캐시 기능이 있는 임베더"""
     def __init__(self, cache_dir: Optional[str] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.cache_dir = Path(cache_dir) if cache_dir else None
-        self.memory_cache: Dict[str, np.ndarray] = {}
-        self.cache_enabled: bool = False # 파일 캐시 활성화 여부
-
-        if self.cache_dir:
-            try:
-                self.cache_dir.mkdir(parents=True, exist_ok=True)
-                self.cache_enabled = True
-                logger.info(f"파일 캐시 사용: {self.cache_dir.resolve()}")
-            except Exception as e:
-                logger.error(f"캐시 디렉토리 생성 실패: {self.cache_dir}. 파일 캐싱 비활성화. 오류: {e}")
-                self.cache_dir = None # 생성 실패 시 None으로 설정
-        else:
-            logger.info("파일 캐시 비활성화됨 (cache_dir가 제공되지 않음).")
+        # super().__init__(**kwargs)  # ← 제거
+        self.cache_dir = cache_dir or os.getenv("EMBED_CACHE_DIR", "./.cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self.cache_enabled = True  # cache 사용 여부
 
     def _get_cache_key(self, text: str) -> str:
         return hashlib.md5(text.encode('utf-8')).hexdigest()
-    
-    def _load_from_cache(self, cache_key: str) -> Optional[np.ndarray]:
-        if cache_key in self.memory_cache:
-            logger.debug(f"메모리 캐시에서 로드: {cache_key}")
-            return self.memory_cache[cache_key]
-        
-        if self.cache_enabled and self.cache_dir:
-            cache_file = self.cache_dir / f"{cache_key}.npy"
-            if cache_file.exists():
-                try:
-                    embedding = np.load(cache_file)
-                    self.memory_cache[cache_key] = embedding
-                    logger.debug(f"파일 캐시에서 로드: {cache_key}")
-                    return embedding
-                except Exception as e:
-                    logger.warning(f"캐시 파일 로드 실패 ({cache_key}): {e}")
-        return None
-    
-    def _save_to_cache(self, cache_key: str, embedding: np.ndarray):
-        self.memory_cache[cache_key] = embedding
-        logger.debug(f"메모리 캐시에 저장: {cache_key}")
-        
-        if self.cache_enabled and self.cache_dir:
-            cache_file = self.cache_dir / f"{cache_key}.npy"
+
+    def _load_from_cache(self, key: str) -> Optional[np.ndarray]:
+        cache_file = Path(self.cache_dir) / f"{key}.npy"
+        if cache_file.exists():
             try:
-                np.save(cache_file, embedding)
-                logger.debug(f"파일 캐시에 저장: {cache_key}")
+                return np.load(cache_file)
             except Exception as e:
-                logger.warning(f"캐시 파일 저장 실패 ({cache_key}): {e}")
+                logger.warning(f"Cache load failed ({cache_file}): {e}")
+        return None
+
+    def _save_to_cache(self, key: str, emb: np.ndarray):
+        cache_file = Path(self.cache_dir) / f"{key}.npy"
+        try:
+            np.save(cache_file, emb)
+        except Exception as e:
+            logger.warning(f"Cache save failed ({cache_file}): {e}")
+
+    def embed(self, texts: List[str]) -> np.ndarray:
+        """기본 캐시 로직: cache_enabled=True인 경우 시도"""
+        embeddings = []
+        for text in texts:
+            key = self._get_cache_key(text)
+            emb = None
+            if self.cache_enabled:
+                emb = self._load_from_cache(key)
+            if emb is None:
+                # 실제 임베딩 (서브클래스 구현 호출)
+                emb = self._encode(text)
+                if self.cache_enabled:
+                    self._save_to_cache(key, emb)
+            embeddings.append(emb)
+        return np.vstack(embeddings)
+
+    def _encode(self, text: str) -> np.ndarray:
+        """서브클래스에서 override"""
+        raise NotImplementedError
 
 class SentenceTransformerEmbedder(CachedEmbedder):
     """SentenceTransformer 임베더"""
@@ -88,10 +78,14 @@ class SentenceTransformerEmbedder(CachedEmbedder):
             logger.error(f"모델 로드 실패: {e}")
             raise
     
+    def _encode(self, text: str) -> np.ndarray:
+        # 실제 임베딩 구현
+        pass
+
     def embed(self, texts: List[str]) -> np.ndarray:
         if not texts:
             return np.array([])
-        
+
         all_embeddings_map: Dict[int, np.ndarray] = {}
         texts_to_encode_indices: List[int] = []
         texts_to_encode_values: List[str] = []
@@ -127,7 +121,7 @@ class SentenceTransformerEmbedder(CachedEmbedder):
 
 class OpenAIEmbedder(CachedEmbedder):
     """OpenAI API 임베더"""
-    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-ada-002", 
+    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-3-large", # text-embedding-ada-002
                  cache_dir: Optional[str] = None, **kwargs):
         super().__init__(cache_dir=cache_dir, **kwargs)
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -141,8 +135,13 @@ class OpenAIEmbedder(CachedEmbedder):
             logger.error("openai 패키지가 설치되지 않았습니다. `pip install openai`")
             raise
     
+    def _encode(self, text: str) -> np.ndarray:
+        # 실제 임베딩 구현
+        pass
+
     def embed(self, texts: List[str]) -> np.ndarray:
         if not texts: return np.array([])
+
         all_embeddings_map: Dict[int, np.ndarray] = {}
         texts_to_encode_indices: List[int] = []
         texts_to_encode_values: List[str] = []
@@ -198,8 +197,12 @@ class CohereEmbedder(CachedEmbedder):
             logger.error("cohere 패키지가 설치되지 않았습니다. `pip install cohere`")
             raise
     
+    def _encode(self, text: str) -> np.ndarray:
+        pass
+
     def embed(self, texts: List[str]) -> np.ndarray:
         if not texts: return np.array([])
+
         all_embeddings_map: Dict[int, np.ndarray] = {}
         texts_to_encode_indices: List[int] = []
         texts_to_encode_values: List[str] = []
@@ -270,6 +273,9 @@ class BGEM3Embedder(CachedEmbedder):
             logger.warning(f"지원하지 않는 임베딩 차원입니다: {embeddings.ndim}. 정규화 없이 반환합니다.")
             return embeddings # 또는 예외 발생
 
+    def _encode(self, text: str) -> np.ndarray:
+        pass
+
     def embed(self, texts: List[str]) -> np.ndarray:
         if not texts:
             return np.array([])
@@ -334,30 +340,12 @@ class BGEM3Embedder(CachedEmbedder):
                          logger.warning("정규화 후 임베딩이 비어있습니다.")
                     else:
                         logger.warning(f"정규화된 임베딩 수({new_embeddings.shape[0]})와 요청 텍스트 수({len(texts_to_encode_values)})가 불일치합니다.")
-
-
             except Exception as e:
-                logger.error(f"BGEM3 임베딩 실패: {e}", exc_info=True) 
-                raise 
+                logger.error(f"BGEM3 임베딩 실패: {e}")
+                raise
         else:
-            logger.debug(f"BGEM3: 모든 {len(texts)}개 텍스트를 캐시에서 로드했습니다.")
-        
-        final_embeddings_list = [all_embeddings_map.get(i) for i in range(len(texts))] # .get()으로 변경하여 KeyEror 방지
-        
-        # None이 포함될 수 있으므로 필터링 또는 적절한 처리 필요
-        # 여기서는 None이 아닌 것들만 stack
-        valid_embeddings = [emb for emb in final_embeddings_list if emb is not None]
-        if not valid_embeddings:
-            return np.array([])
-        
-        # 모든 임베딩이 동일한 shape인지 확인 (스택하기 전)
-        first_shape = valid_embeddings[0].shape
-        if not all(emb.shape == first_shape for emb in valid_embeddings):
-            logger.error("스택할 임베딩들의 차원이 일치하지 않습니다.")
-            # 차원이 다른 경우 어떻게 처리할지 결정해야 함 (예: 오류 발생, 빈 배열 반환 등)
-            # 여기서는 가장 흔한 경우(모두 동일 차원)를 가정하고 진행. 문제가 지속되면 상세 로깅 필요.
-            # 임시로 첫 번째 임베딩과 차원이 같은 것들만 사용하거나, 오류 발생
-            valid_embeddings = [emb for emb in valid_embeddings if emb.shape == first_shape]
-            if not valid_embeddings: return np.array([])
+            logger.debug(f"{self.__class__.__name__}: 모든 {len(texts)}개 텍스트 캐시 로드.")
 
-        return np.stack(valid_embeddings)
+        final_embeddings_list = [all_embeddings_map[i] for i in range(len(texts))]
+        if not final_embeddings_list: return np.array([])
+        return np.stack(final_embeddings_list)

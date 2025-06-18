@@ -35,7 +35,6 @@ def main():
     parser.add_argument("--source_tokenizer", default="jieba", help="원문 토크나이저 타입")
     parser.add_argument("--target_tokenizer", default="mecab", help="번역문 토크나이저 타입")
     parser.add_argument("--embedder", default="bge-m3", help="임베더 타입")
-    parser.add_argument("--aligner", default="strict", help="정렬기 타입") # 기본값 strict 유지
     parser.add_argument("--parallel", action="store_true", help="병렬 처리 사용 여부")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 2, help="병렬 처리 시 사용할 워커 수")
     parser.add_argument("--chunk_size", type=int, default=50, help="병렬 처리 시 청크 크기")
@@ -61,7 +60,7 @@ def main():
         config = Config(
             input_path=args.input_path, output_path=args.output_path,
             source_tokenizer_type=args.source_tokenizer, target_tokenizer_type=args.target_tokenizer,
-            embedder_type=args.embedder, aligner_type=args.aligner,
+            embedder_type=args.embedder, # aligner_type="strict", ← 삭제
             use_parallel=args.parallel, num_workers=args.workers,
             chunk_size=args.chunk_size, verbose=args.verbose
             # source_tokenizer_config, target_tokenizer_config, embedder_config, aligner_config는
@@ -75,7 +74,7 @@ def main():
         logging.info(f"원문 토크나이저: {config.source_tokenizer_type}")
         logging.info(f"번역문 토크나이저: {config.target_tokenizer_type}")
         logging.info(f"임베더: {config.embedder_type} (캐시: {config.embedder_config.get('cache_dir', '미설정')})")
-        logging.info(f"정렬기: {config.aligner_type}")
+        # logging.info(f"정렬기: {config.aligner_type}") ← 삭제
         logging.info(f"병렬 처리: {'활성화' if config.use_parallel else '비활성화'} (워커: {config.num_workers}, 청크 크기: {config.chunk_size})")
 
         run_processing(config)

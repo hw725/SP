@@ -6,8 +6,7 @@ from tqdm import tqdm
 
 from .config import Config
 from .pipeline import process_single_row
-# TextMasker와 이를 가져오는 함수 추가
-from .components import get_tokenizer, get_embedder, get_aligner, get_text_masker 
+from .components import get_tokenizer, get_embedder, get_text_masker
 from .file_io import load_data, save_data
 
 logger = logging.getLogger(__name__)
@@ -64,9 +63,8 @@ def _unmask_texts_in_result(
 def process_chunk(chunk_data: List[Dict[str, Any]], config: Config) -> List[Dict[str, Any]]:
     source_tokenizer = get_tokenizer(config.source_tokenizer_type, **config.source_tokenizer_config)
     target_tokenizer = get_tokenizer(config.target_tokenizer_type, **config.target_tokenizer_config)
-    worker_embedder = get_embedder(config.embedder_type, config_obj=config)
-    worker_aligner = get_aligner(config.aligner_type, **config.aligner_config)
-    # TextMasker 인스턴스 생성 (config.text_masker_config는 Config 클래스에 정의되어 있다고 가정)
+    worker_embedder = get_embedder(config.embedder_type, **config.embedder_config)
+    # worker_aligner = get_aligner(config.aligner_type, **config.aligner_config)  # 이 줄은 이미 주석 처리되어 있음 (좋음)
     text_masker = get_text_masker(**getattr(config, 'text_masker_config', {}))
     
     processed_rows = []
@@ -74,7 +72,7 @@ def process_chunk(chunk_data: List[Dict[str, Any]], config: Config) -> List[Dict
         try:
             processed_result_dict = process_single_row(
                 row_data, source_tokenizer, target_tokenizer, 
-                worker_embedder, worker_aligner
+                worker_embedder  # aligner 인자 없음 (좋음)
             )
             
             # 언마스킹 수행
@@ -97,10 +95,15 @@ def process_chunk(chunk_data: List[Dict[str, Any]], config: Config) -> List[Dict
 def run_processing(config: Config):
     logger.info("데이터 로드 시작...")
     try:
-        data = load_data(config.input_path) 
+        data = load_data(config.input_path)
     except Exception as e:
         logger.error(f"데이터 로드 중 치명적 에러: {e}", exc_info=True)
         return
+
+    # ← 추가: 원본 순서를 보존할 수 있도록 메타 정보 삽입
+    for idx, row in enumerate(data):
+        row['__row_order'] = idx
+
     logger.info(f"총 {len(data)}개 행 로드됨")
 
     if not data:
@@ -134,24 +137,26 @@ def run_processing(config: Config):
         logger.info("순차 처리 모드")
         source_tokenizer = get_tokenizer(config.source_tokenizer_type, **config.source_tokenizer_config)
         target_tokenizer = get_tokenizer(config.target_tokenizer_type, **config.target_tokenizer_config)
-        embedder = get_embedder(config.embedder_type, config_obj=config) 
-        aligner = get_aligner(config.aligner_type, **config.aligner_config)
-        # TextMasker 인스턴스 생성
+        embedder = get_embedder(config.embedder_type, **config.embedder_config) 
+        # aligner = get_aligner(config.aligner_type, **config.aligner_config)  # 이 줄은 이미 주석 처리되어 있음 (좋음)
         text_masker = get_text_masker(**getattr(config, 'text_masker_config', {}))
         
         with tqdm(total=len(data), desc="행 처리 중") as pbar:
             for row_data in data:
                 try:
                     processed_result_dict = process_single_row(
-                        row_data, source_tokenizer, target_tokenizer, embedder, aligner
+                        row_data,
+                        source_tokenizer,
+                        target_tokenizer,
+                        embedder
                     )
                     
                     # 언마스킹 수행
                     unmasked_result_dict = _unmask_texts_in_result(
-                        processed_result_dict, 
-                        text_masker, 
-                        getattr(config, 'output_unmask_type', 'original')  # 기본값 'original' 제공
-        )
+                        processed_result_dict,
+                        text_masker,
+                        getattr(config, 'output_unmask_type', 'original')
+                    )
                     
                     merged_row = {**row_data, **unmasked_result_dict}
                     processed_data.append(merged_row)
