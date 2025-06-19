@@ -10,24 +10,14 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Config:
     """설정 클래스"""
-    # 필수 인자들
+    # 파일 경로
     input_path: str
     output_path: str
     
-    # 클래스 변수로 기본값 정의
-    DEFAULT_SOURCE_TOKENIZER = "jieba"
-    DEFAULT_TARGET_TOKENIZER = "mecab" 
-    DEFAULT_EMBEDDER_TYPE = "sentence-transformer"
-    DEFAULT_NUM_WORKERS = 4
-    DEFAULT_CHUNK_SIZE = 100
-    
-    # 실제 필드들 (클래스 변수를 기본값으로 사용)
-    source_tokenizer_type: str = DEFAULT_SOURCE_TOKENIZER
-    target_tokenizer_type: str = DEFAULT_TARGET_TOKENIZER
-    embedder_type: str = DEFAULT_EMBEDDER_TYPE
-    use_parallel: bool = False
-    num_workers: int = DEFAULT_NUM_WORKERS
-    chunk_size: int = DEFAULT_CHUNK_SIZE
+    # 컴포넌트 타입
+    source_tokenizer_type: str = "jieba"  # 원문용 토크나이저
+    target_tokenizer_type: str = "mecab"  # 번역문용 토크나이저
+    embedder_type: str = "sentence-transformer"  # 여기서만 기본값 관리
     
     # 컴포넌트 설정
     source_tokenizer_config: Dict[str, Any] = field(default_factory=dict)
@@ -35,6 +25,11 @@ class Config:
     embedder_config: Dict[str, Any] = field(default_factory=lambda: {
         "use_fp16": True,  # BGE-M3 기본값
     })
+    
+    # 처리 옵션
+    use_parallel: bool = False
+    num_workers: int = 1
+    chunk_size: int = 100
     
     # 기타
     verbose: bool = False

@@ -21,7 +21,7 @@ def _unmask_texts_in_result(
     masking_map은 processing_info에서 가져옵니다.
     """
     if not processed_result_dict or processed_result_dict.get('processing_info', {}).get('status') != 'success':
-        return processed_result_dict
+        return processed_result_dict # 변경 없이 반환
 
     processing_info = processed_result_dict['processing_info']
     masking_map_source = processing_info.get('masking_map_source')
@@ -36,22 +36,25 @@ def _unmask_texts_in_result(
                 current_aligned_source,
                 masking_map_source
             )
-        elif isinstance(current_aligned_source, str) and "__PAREN_" in current_aligned_source:
-            logger.warning(f"Source text for ID {processed_result_dict.get('id', 'N/A')} contains placeholders but no masking_map_source found.")
+        elif isinstance(current_aligned_source, str) and "__PAREN_" in current_aligned_source : # 맵이 없는데 플레이스홀더가 있는 경우 경고
+             logger.warning(f"Source text for ID {processed_result_dict.get('id', 'N/A')} contains placeholders but no masking_map_source found.")
+
 
         if masking_map_target and isinstance(current_aligned_target, str):
             processed_result_dict['aligned_target'] = text_masker.restore(
                 current_aligned_target,
                 masking_map_target
             )
-        elif isinstance(current_aligned_target, str) and "__PAREN_" in current_aligned_target:
+        elif isinstance(current_aligned_target, str) and "__PAREN_" in current_aligned_target: # 맵이 없는데 플레이스홀더가 있는 경우 경고
             logger.warning(f"Target text for ID {processed_result_dict.get('id', 'N/A')} contains placeholders but no masking_map_target found.")
 
     except Exception as e:
-        row_id = processed_result_dict.get('id', 'N/A')
+        row_id = processed_result_dict.get('id', 'N/A') # 원본 row_data에서 id를 가져올 수 있다면 사용
         logger.error(f"언마스킹 중 오류 발생 (ID: {row_id}): {e}", exc_info=True)
+        # 오류 발생 시 원본 마스킹된 텍스트를 유지할 수 있도록 별도 처리는 하지 않음.
+        # 필요하다면 processing_info에 오류 기록 추가 가능
         if 'processing_info' in processed_result_dict:
-            processed_result_dict['processing_info']['unmasking_error'] = str(e)
+            processed_result_dict['processing_info']['unmask_error'] = str(e)
 
     return processed_result_dict
 
@@ -59,6 +62,7 @@ def process_chunk(chunk_data: List[Dict[str, Any]], config: Config) -> List[Dict
     source_tokenizer = get_tokenizer(config.source_tokenizer_type, **config.source_tokenizer_config)
     target_tokenizer = get_tokenizer(config.target_tokenizer_type, **config.target_tokenizer_config)
     worker_embedder = get_embedder(config.embedder_type, **config.embedder_config)
+    # worker_aligner = get_aligner(config.aligner_type, **config.aligner_config)  # 이 줄은 이미 주석 처리되어 있음 (좋음)
     text_masker = get_text_masker(**getattr(config, 'text_masker_config', {}))
     
     processed_rows = []
@@ -66,14 +70,14 @@ def process_chunk(chunk_data: List[Dict[str, Any]], config: Config) -> List[Dict
         try:
             processed_result_dict = process_single_row(
                 row_data, source_tokenizer, target_tokenizer, 
-                worker_embedder
+                worker_embedder  # aligner 인자 없음 (좋음)
             )
             
             # 언마스킹 수행
             unmasked_result_dict = _unmask_texts_in_result(
                 processed_result_dict, 
                 text_masker, 
-                getattr(config, 'output_unmask_type', 'original')
+                getattr(config, 'output_unmask_type', 'original')  # 기본값 'original' 제공
             )
             
             merged_row = {**row_data, **unmasked_result_dict} 
@@ -94,7 +98,7 @@ def run_processing(config: Config):
         logger.error(f"데이터 로드 중 치명적 에러: {e}", exc_info=True)
         return
 
-    # 원본 순서를 보존할 수 있도록 메타 정보 삽입
+    # ← 추가: 원본 순서를 보존할 수 있도록 메타 정보 삽입
     for idx, row in enumerate(data):
         row['__row_order'] = idx
 
@@ -106,7 +110,7 @@ def run_processing(config: Config):
 
     processed_data: List[Dict[str, Any]] = [] 
     
-    if config.use_parallel and config.num_workers > 0 and len(data) > config.chunk_size:
+    if config.use_parallel and config.num_workers > 0 and len(data) > config.chunk_size :
         logger.info(f"병렬 처리 모드: {config.num_workers}개 워커, 청크 크기: {config.chunk_size}")
         chunks = [data[i:i + config.chunk_size] for i in range(0, len(data), config.chunk_size)]
         
@@ -132,6 +136,7 @@ def run_processing(config: Config):
         source_tokenizer = get_tokenizer(config.source_tokenizer_type, **config.source_tokenizer_config)
         target_tokenizer = get_tokenizer(config.target_tokenizer_type, **config.target_tokenizer_config)
         embedder = get_embedder(config.embedder_type, **config.embedder_config) 
+        # aligner = get_aligner(config.aligner_type, **config.aligner_config)  # 이 줄은 이미 주석 처리되어 있음 (좋음)
         text_masker = get_text_masker(**getattr(config, 'text_masker_config', {}))
         
         with tqdm(total=len(data), desc="행 처리 중") as pbar:

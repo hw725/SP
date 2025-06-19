@@ -145,10 +145,10 @@ def calculate_matching_score(
     src_analysis: Dict[str, Any],
     source_analyzer=None,
     target_analyzer=None,
-    weight_semantic: float = 0.75,
-    weight_structure: float = 0.1,
-    weight_pos: float = 0.05,
-    weight_cross: float = 0.1,
+    weight_semantic: float = 0.6,
+    weight_structure: float = 0.25,
+    weight_pos: float = 0.1,
+    weight_cross: float = 0.05,
     cross_tok=None,
     cross_enc=None
 ) -> float:
@@ -170,26 +170,20 @@ def calculate_matching_score(
     # Cross‐Encoder re‐rank (옵션)
     cross_score = 0.0
     if cross_tok and cross_enc and weight_cross > 0:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
         inputs = cross_tok(
             src_unit, tgt_span,
             return_tensors="pt", truncation=True, max_length=128
         ).to(device)
-        
         with torch.no_grad():
-            logits = cross_enc(**inputs).logits
-            
-            # 로그 크기에 따른 분기 처리
-            if logits.dim() == 2 and logits.size(1) > 1:
-                # 분류 모델 (multiple classes)
-                probs = torch.softmax(logits, dim=1)
-                cross_score = probs[0, 1].item()
-            else:
-                # 회귀 모델 또는 단일 출력
-                val = logits.view(-1)[0]
-                cross_score = torch.sigmoid(val).item()
-    
+            logits = cross_enc(**inputs).logits  # shape (batch, labels) or (batch,1)
+        # 1) classification head일 때 (labels>1): softmax[1]
+        if logits.dim() == 2 and logits.size(1) > 1:
+            probs = torch.softmax(logits, dim=1)
+            cross_score = probs[0, 1].item()
+        # 2) regression/single-logit head일 때: sigmoid(logit)
+        else:
+            val = logits.view(-1)[0]
+            cross_score = torch.sigmoid(val).item()
     # 최종 가중합
     final_score = (
           weight_semantic  * semantic_similarity
@@ -290,57 +284,26 @@ def split_tgt_by_src_units_with_eojeol_merge(
     # 5) 경로 복원
     # 최적 종료점
     end_j = int(np.argmax(dp[n_src]))
-    logger.info(f"[DEBUG] 최적 종료점: {end_j}, 전체 tgt 길이: {n_tgt}")
-    
     aligned = ["" for _ in range(n_src)]
     i, j = n_src, end_j
-    matched_ranges = []  # 매핑된 번역문 범위 추적
-    
     while i > 0:
         pi, pj, pk = parent[i,j]
         if pk > pj:
             aligned[pi] = " ".join(tgt_eojeols[pj:pk])
-            matched_ranges.append((pj, pk))
         i, j = pi, pj
-    
-    matched_ranges.sort()  # 범위를 순서대로 정렬
-    
-    # 누락된 번역문 처리
-    if matched_ranges:
-        # 첫 번째 매핑 이전의 번역문 (prefix)
-        if matched_ranges[0][0] > 0:
-            prefix = " ".join(tgt_eojeols[0:matched_ranges[0][0]])
-            # 첫 번째 매핑된 원문에 추가
-            first_mapped = next(i for i, text in enumerate(aligned) if text)
-            aligned[first_mapped] = f"{prefix} {aligned[first_mapped]}".strip()
-        
-        # 마지막 매핑 이후의 번역문 (suffix)
-        if matched_ranges[-1][1] < n_tgt:
-            suffix = " ".join(tgt_eojeols[matched_ranges[-1][1]:n_tgt])
-            # 마지막 매핑된 원문에 추가
-            last_mapped = next(i for i in reversed(range(n_src)) if aligned[i])
-            aligned[last_mapped] = f"{aligned[last_mapped]} {suffix}".strip()
-        
-        # 매핑 사이의 누락된 번역문 처리
-        for i in range(len(matched_ranges) - 1):
-            curr_end = matched_ranges[i][1]
-            next_start = matched_ranges[i + 1][0]
-            
-            if curr_end < next_start:
-                # 사이에 누락된 번역문이 있음
-                gap_text = " ".join(tgt_eojeols[curr_end:next_start])
-                # 다음 매핑에 추가 (또는 현재 매핑에 추가)
-                next_mapped_idx = next(idx for idx, text in enumerate(aligned) if text and any((start, end) for start, end in matched_ranges if start == matched_ranges[i+1][0]))
-                aligned[next_mapped_idx] = f"{gap_text} {aligned[next_mapped_idx]}".strip()
-    
-    else:
-        # 아예 매핑이 안 된 경우 - 전체 번역문을 첫 번째 원문에 할당
-        if n_tgt > 0:
-            aligned[0] = tgt_text
-    
-    # 빈 문자열 처리
-    for i in range(len(aligned)):
-        if not aligned[i].strip():
-            aligned[i] = ""
-    
+
+    # 6) prefix/suffix 처리
+    if aligned and any(aligned):
+        # leading
+        first_non = next((idx for idx,s in enumerate(aligned) if s), 0)
+        if first_non > 0 and span_keys:
+            prefix = " ".join(tgt_eojeols[0:span_keys[0][0]])
+            aligned[first_non] = f"{prefix} {aligned[first_non]}".strip()
+        # trailing
+        last_non = next((idx for idx in reversed(range(n_src)) if aligned[idx]), n_src-1)
+        end_span = span_keys[-1][1] if span_keys else n_tgt
+        if end_span < n_tgt:
+            suffix = " ".join(tgt_eojeols[end_span:n_tgt])
+            aligned[last_non] = f"{aligned[last_non]} {suffix}".strip()
+
     return aligned

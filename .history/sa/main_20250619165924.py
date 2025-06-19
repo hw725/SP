@@ -31,32 +31,37 @@ def setup_logging(verbose: bool):
 def main():
     parser = argparse.ArgumentParser(description="텍스트 정렬 파이프라인")
     
+    # 기본 Config 인스턴스로부터 기본값 가져오기
+    default_config = Config()
+    
     # 기본 인자들
     parser.add_argument("input", help="입력 파일 경로")
     parser.add_argument("output", help="출력 파일 경로")
     
-    # Config 클래스 변수에서 기본값 가져오기
+    # 토크나이저 옵션 (Config에서 기본값 가져옴)
     parser.add_argument("--source-tokenizer", 
-                       default=Config.DEFAULT_SOURCE_TOKENIZER,
-                       help=f"원문 토크나이저 타입 (기본값: {Config.DEFAULT_SOURCE_TOKENIZER})")
+                       default=default_config.source_tokenizer_type,
+                       help=f"원문 토크나이저 타입 (기본값: {default_config.source_tokenizer_type})")
     
     parser.add_argument("--target-tokenizer", 
-                       default=Config.DEFAULT_TARGET_TOKENIZER,
-                       help=f"번역문 토크나이저 타입 (기본값: {Config.DEFAULT_TARGET_TOKENIZER})")
+                       default=default_config.target_tokenizer_type,
+                       help=f"번역문 토크나이저 타입 (기본값: {default_config.target_tokenizer_type})")
     
+    # 임베더 옵션 (Config에서 기본값 가져옴)
     parser.add_argument("--embedder", 
-                       default=Config.DEFAULT_EMBEDDER_TYPE,
-                       help=f"임베더 타입 (기본값: {Config.DEFAULT_EMBEDDER_TYPE})")
+                       default=default_config.embedder_type,
+                       help=f"임베더 타입 (기본값: {default_config.embedder_type})")
     
+    # 기타 옵션들
     parser.add_argument("--parallel", action="store_true", help="병렬 처리 사용")
-    parser.add_argument("--workers", type=int, default=Config.DEFAULT_NUM_WORKERS,
-                       help=f"워커 프로세스 수 (기본값: {Config.DEFAULT_NUM_WORKERS})")
-    parser.add_argument("--chunk-size", type=int, default=Config.DEFAULT_CHUNK_SIZE,
-                       help=f"청크 크기 (기본값: {Config.DEFAULT_CHUNK_SIZE})")
+    parser.add_argument("--workers", type=int, default=default_config.num_workers,
+                       help=f"워커 프로세스 수 (기본값: {default_config.num_workers})")
+    parser.add_argument("--chunk-size", type=int, default=default_config.chunk_size,
+                       help=f"청크 크기 (기본값: {default_config.chunk_size})")
     
     args = parser.parse_args()
     
-    # Config 생성
+    # Config 생성 (이제 모든 값이 유효함)
     config = Config(
         input_path=args.input,
         output_path=args.output,
@@ -65,7 +70,8 @@ def main():
         embedder_type=args.embedder,
         use_parallel=args.parallel,
         num_workers=args.workers,
-        chunk_size=args.chunk_size
+        chunk_size=args.chunk_size,
+        # ... 다른 필드들은 기본값 사용 ...
     )
     
     # 설정 로깅

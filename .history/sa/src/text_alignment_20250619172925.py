@@ -145,10 +145,10 @@ def calculate_matching_score(
     src_analysis: Dict[str, Any],
     source_analyzer=None,
     target_analyzer=None,
-    weight_semantic: float = 0.75,
-    weight_structure: float = 0.1,
-    weight_pos: float = 0.05,
-    weight_cross: float = 0.1,
+    weight_semantic: float = 0.6,
+    weight_structure: float = 0.25,
+    weight_pos: float = 0.1,
+    weight_cross: float = 0.05,
     cross_tok=None,
     cross_enc=None
 ) -> float:
@@ -342,5 +342,19 @@ def split_tgt_by_src_units_with_eojeol_merge(
     for i in range(len(aligned)):
         if not aligned[i].strip():
             aligned[i] = ""
+    
+    # 전체 번역문이 보존되었는지 확인
+    used_text = " ".join(aligned).strip()
+    original_text = tgt_text.strip()
+    
+    if len(used_text) < len(original_text) * 0.8:  # 80% 미만만 사용되었다면
+        logger.warning(f"번역문 누락 감지: 원본 {len(original_text)}자 → 결과 {len(used_text)}자")
+        
+        # Fallback: 길이 비례로 단순 분할
+        words_per_unit = max(1, len(tgt_eojeols) // n_src)
+        for i in range(n_src):
+            start_idx = i * words_per_unit
+            end_idx = (i + 1) * words_per_unit if i < n_src - 1 else len(tgt_eojeols)
+            aligned[i] = " ".join(tgt_eojeols[start_idx:end_idx])
     
     return aligned

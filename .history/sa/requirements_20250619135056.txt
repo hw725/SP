@@ -17,8 +17,8 @@ mecab-ko-dic-msvc
 prompt_toolkit
 
 # 추가 필요
-transformers>=4.21.0
-FlagEmbedding>=1.2.0
-sentence-transformers>=2.2.0
-openai>=1.0.0
-cohere>=4.0.0
+transformers
+FlagEmbedding
+sentence-transformers
+openai
+cohere

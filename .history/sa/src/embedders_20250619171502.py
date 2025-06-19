@@ -127,8 +127,8 @@ class SentenceTransformerEmbedder(CachedEmbedder):
     """SentenceTransformer 임베더"""
     def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", 
                  cache_dir: Optional[str] = None, device: Optional[str] = None, **kwargs):
-        self.model_name = model_name
         super().__init__(cache_dir=cache_dir, **kwargs)
+        self.model_name = model_name
         self.device = device
         self.model = None
         self._load_model()
@@ -162,19 +162,15 @@ class SentenceTransformerEmbedder(CachedEmbedder):
             return 384  # 기본값
         return self.model.get_sentence_embedding_dimension()
 
-    def _get_model_identifier(self) -> str:
-        """SentenceTransformer 모델별 고유 식별자"""
-        return f"st_{self.model_name.replace('/', '_').replace('-', '_')}"
-
 class OpenAIEmbedder(CachedEmbedder):
     """OpenAI API 임베더"""
     def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-3-large",
                  cache_dir: Optional[str] = None, **kwargs):
-        self.model = model
         super().__init__(cache_dir=cache_dir, **kwargs)
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OpenAI API 키가 필요합니다. 인자로 전달하거나 OPENAI_API_KEY 환경 변수를 설정하세요.")
+        self.model = model
         try:
             import openai
             self.client = openai.OpenAI(api_key=self.api_key)
@@ -212,10 +208,6 @@ class OpenAIEmbedder(CachedEmbedder):
         elif "text-embedding-ada-002" in self.model:
             return 1536
         return 1536  # 기본값
-
-    def _get_model_identifier(self) -> str:
-        """OpenAI 모델별 고유 식별자"""
-        return f"openai_{self.model.replace('-', '_')}"
 
 class CohereEmbedder(CachedEmbedder):
     """Cohere API 임베더"""
@@ -263,7 +255,6 @@ class CohereEmbedder(CachedEmbedder):
 class BGEM3Embedder(CachedEmbedder):
     """BGEM3 임베더"""
     def __init__(self, model_name: str = "BAAI/bge-m3", use_fp16: bool = True, cache_dir: Optional[str] = None, **kwargs):
-        self.model_name = model_name
         super().__init__(cache_dir=cache_dir, **kwargs)
         try:
             from FlagEmbedding import BGEM3FlagModel
@@ -311,7 +302,3 @@ class BGEM3Embedder(CachedEmbedder):
 
     def _get_embedding_dimension(self) -> int:
         return 1024  # BGEM3의 기본 차원
-
-    def _get_model_identifier(self) -> str:
-        """BGE 모델별 고유 식별자"""
-        return f"bge_{self.model_name.replace('/', '_').replace('-', '_')}"

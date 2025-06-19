@@ -70,11 +70,11 @@ def process_single_row(
         
         # 4. 번역문 분할
         tgt_units = split_tgt_meaning_units(
-            src_units,                    # 위치 매개변수
-            masked_tgt,                   # 위치 매개변수
-            embedder.embed,               # 위치 매개변수
-            None,                         # source_analyzer
-            None                          # target_analyzer
+            src_units,      # 첫 번째
+            masked_tgt,     # 두 번째
+            embed_func=embed_func, 
+            source_analyzer=source_tokenizer if hasattr(source_tokenizer, 'analyze_structure') else None,
+            target_analyzer=target_tokenizer if hasattr(target_tokenizer, 'analyze_structure') else None
         )
         if not tgt_units:
             processing_info['error'] = 'Target text could not be split into units aligned with source'

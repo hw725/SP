@@ -147,7 +147,7 @@ def calculate_matching_score(
     target_analyzer=None,
     weight_semantic: float = 0.75,
     weight_structure: float = 0.1,
-    weight_pos: float = 0.05,
+    weight_pos: float = 0.15,
     weight_cross: float = 0.1,
     cross_tok=None,
     cross_enc=None

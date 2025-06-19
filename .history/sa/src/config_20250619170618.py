@@ -15,7 +15,7 @@ class Config:
     output_path: str
     
     # 클래스 변수로 기본값 정의
-    DEFAULT_SOURCE_TOKENIZER = "jieba"
+    DEFAULT_SOURCE_TOKENIZER = "mecab"
     DEFAULT_TARGET_TOKENIZER = "mecab" 
     DEFAULT_EMBEDDER_TYPE = "sentence-transformer"
     DEFAULT_NUM_WORKERS = 4
