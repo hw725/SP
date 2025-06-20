@@ -1,0 +1,15 @@
+# Install necessary packages (GPU version with CUDA 12.1)
+regex
+pandas
+numpy
+tqdm
+openpyxl
+soynlp
+torch
+torchvision
+torchaudio --index-url https://download.pytorch.org/whl/cu121
+sentence-transformers
+FlagEmbedding
+jieba
+# MeCab은 이미 설치되어 있으므로 주석으로만 표시
+# mecab-ko, mecab-ko-dic, mecab-ko-dic-msvc, mecab-ko-msvc

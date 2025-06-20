@@ -1,0 +1,118 @@
+"""메인 실행 파일 - 원본 기반 완전 구현"""
+
+import argparse
+import sys
+import os
+import shutil
+from pathlib import Path
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def setup_files(target_tokenizer: str, embedder: str):
+    """파일 교체 설정"""
+    
+    # 토크나이저 파일 매핑
+    tokenizer_files = {
+        'mecab': 'tokenizer_original.py',  # 원본
+        'soy': 'tokenizer_soy.py',
+        'kkma': 'tokenizer_kkma.py'
+    }
+    
+    # 임베더 파일 매핑  
+    embedder_files = {
+        'bge': 'embedder_bge.py',
+        'openai': 'embedder_openai.py',
+        'hf': 'embedder_hf.py'
+    }
+    
+    # 토크나이저 교체
+    tokenizer_source = tokenizer_files.get(target_tokenizer)
+    if tokenizer_source and Path(tokenizer_source).exists():
+        shutil.copy2(tokenizer_source, 'tokenizer.py')
+        logger.info(f"토크나이저를 {target_tokenizer}로 교체")
+    else:
+        logger.error(f"토크나이저 파일을 찾을 수 없음: {tokenizer_source}")
+        return False
+    
+    # 임베더 교체
+    embedder_source = embedder_files.get(embedder)
+    if embedder_source and Path(embedder_source).exists():
+        shutil.copy2(embedder_source, 'embedder.py')
+        logger.info(f"임베더를 {embedder}로 교체")
+    else:
+        logger.error(f"임베더 파일을 찾을 수 없음: {embedder_source}")
+        return False
+        
+    return True
+
+def main():
+    parser = argparse.ArgumentParser(description="Prototype02 텍스트 정렬 시스템")
+    parser.add_argument("input_path", help="입력 파일 경로 (.xlsx)")
+    parser.add_argument("output_path", help="출력 파일 경로 (.xlsx)")
+    
+    # 번역문 토크나이저 선택 (원문은 jieba 고정)
+    parser.add_argument("--target-tokenizer", 
+                       choices=['mecab', 'soy', 'kkma'], 
+                       default='mecab',
+                       help="번역문 토크나이저 (기본값: mecab)")
+    
+    # 임베더 선택
+    parser.add_argument("--embedder",
+                       choices=['bge', 'openai', 'hf'],
+                       default='bge', 
+                       help="임베더 선택 (기본값: bge)")
+    
+    parser.add_argument("--verbose", "-v", action="store_true", help="상세 로그")
+    
+    args = parser.parse_args()
+    
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    # 입력 파일 확인
+    if not Path(args.input_path).exists():
+        logger.error(f"입력 파일을 찾을 수 없습니다: {args.input_path}")
+        sys.exit(1)
+    
+    # 파일 설정
+    logger.info("=== 파일 설정 시작 ===")
+    logger.info(f"설정: 원문=jieba(고정), 번역문={args.target_tokenizer}, 임베더={args.embedder}")
+    
+    if not setup_files(args.target_tokenizer, args.embedder):
+        logger.error("파일 설정 실패")
+        sys.exit(1)
+    
+    # 처리 실행
+    logger.info("=== 처리 시작 ===")
+    try:
+        # 동적 임포트 (파일 교체 후)
+        import importlib
+        
+        # 모듈 재로드
+        if 'io_manager' in sys.modules:
+            importlib.reload(sys.modules['io_manager'])
+        if 'tokenizer' in sys.modules:
+            importlib.reload(sys.modules['tokenizer'])
+        if 'embedder' in sys.modules:
+            importlib.reload(sys.modules['embedder'])
+            
+        from io_manager import process_file
+        
+        logger.info(f"입력: {args.input_path}")
+        logger.info(f"출력: {args.output_path}")
+        
+        process_file(args.input_path, args.output_path)
+        
+        logger.info("=== 처리 완료 ===")
+        
+    except Exception as e:
+        logger.error(f"처리 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

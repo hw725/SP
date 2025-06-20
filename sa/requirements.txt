@@ -1,24 +1,19 @@
-# Install necessary packages (GPU version with CUDA 12.4)
-# GPU 버전 PyTorch 설치 (CUDA 12.4)
---extra-index-url https://download.pytorch.org/whl/cu124
-torch
-torchvision
-
+# Install necessary packages (GPU version with CUDA 12.1)
 regex
 pandas
 numpy
 tqdm
 openpyxl
 soynlp
+torch
+torchvision
+torchaudio --index-url https://download.pytorch.org/whl/cu121
+sentence-transformers
+FlagEmbedding
 jieba
-mecab_ko
-mecab-ko-msvc
-mecab-ko-dic-msvc
-prompt_toolkit
+# 🔧 이미 설치된 MeCab 패키지들 (그대로 유지)
+mecab-ko>=1.0.0
+mecab-ko-dic>=1.0.0
 
-# 추가 필요
-transformers>=4.21.0
-FlagEmbedding>=1.2.0
-sentence-transformers>=2.2.0
-openai>=1.0.0
-cohere>=4.0.0
+# 🆕 추가 패키지
+regex>=2024.11.6

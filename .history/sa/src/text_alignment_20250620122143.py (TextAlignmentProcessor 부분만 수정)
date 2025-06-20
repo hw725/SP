@@ -1,0 +1,120 @@
+class TextAlignmentProcessor:
+    """원문/번역문 분석기를 모두 활용한 텍스트 정렬 프로세서"""
+    
+    def __init__(self, source_analyzer=None, target_analyzer=None, min_tokens: int = 1, **kwargs):
+        self.text_masker = TextMasker()
+        
+        # 원문용 분석기 분할기
+        self.src_splitter = AnalyzerAwareSourceTextSplitter(analyzer=source_analyzer)
+        
+        # 번역문용 분석기 분할기 (새로 추가)
+        self.tgt_splitter = AnalyzerAwareSourceTextSplitter(analyzer=target_analyzer)
+        
+        self.tgt_aligner = TargetTextAligner(min_tokens=min_tokens)
+        self.text_aligner = TextAligner()
+        
+        self.source_analyzer = source_analyzer
+        self.target_analyzer = target_analyzer
+        
+        logger.info(f"TextAlignmentProcessor 초기화 완료")
+        logger.info(f"  - 원문 분석기: {type(source_analyzer).__name__ if source_analyzer else 'None'}")  
+        logger.info(f"  - 번역문 분석기: {type(target_analyzer).__name__ if target_analyzer else 'None'}")
+    
+    def process(self, src_text: str, tgt_text: str, embed_func: Callable) -> Tuple[str, str, Dict]:
+        """원문/번역문 분석기를 모두 활용한 텍스트 정렬"""
+        processing_info = {
+            'algorithm': 'prototype02_dual_analyzer',
+            'source_analyzer': type(self.source_analyzer).__name__ if self.source_analyzer else 'None',
+            'target_analyzer': type(self.target_analyzer).__name__ if self.target_analyzer else 'None'
+        }
+        
+        if not src_text or not tgt_text:
+            return src_text, tgt_text, {'error': 'Empty input text'}
+        
+        try:
+            logger.debug(f"이중 분석기 처리 시작")
+            logger.debug(f"  원문: '{src_text[:50]}...'")
+            logger.debug(f"  번역문: '{tgt_text[:50]}...'")
+            
+            # 1. 마스킹 (Prototype02 순서 보장)
+            masked_src, src_masks = self.text_masker.mask(src_text, text_type="source")
+            masked_tgt, tgt_masks = self.text_masker.mask(tgt_text, text_type="target")
+            
+            processing_info.update({
+                'src_masks': len(src_masks),
+                'tgt_masks': len(tgt_masks)
+            })
+
+            # 2. 원문 분석기 활용 분할
+            src_units = self.src_splitter.split(masked_src)
+            if not src_units:
+                src_units = [masked_src]
+            
+            logger.debug(f"원문 분할 결과 ({len(src_units)}개): {src_units}")
+
+            # 3. 번역문 분석기 활용 (선택적)
+            if self.target_analyzer and hasattr(self.target_analyzer, 'analyze'):
+                logger.debug("번역문 분석기를 활용한 사전 분할 시도")
+                
+                try:
+                    # 번역문도 분석기로 사전 분할
+                    tgt_pre_units = self.tgt_splitter.split(masked_tgt)
+                    if tgt_pre_units:
+                        logger.debug(f"번역문 사전 분할 결과: {tgt_pre_units}")
+                        # 사전 분할된 번역문을 다시 합쳐서 DP 입력으로 사용
+                        masked_tgt = " ".join(tgt_pre_units)
+                        processing_info['tgt_pre_split'] = True
+                except Exception as e:
+                    logger.debug(f"번역문 사전 분할 실패: {e}")
+                    processing_info['tgt_pre_split'] = False
+
+            # 4. DP 알고리즘으로 최종 정렬
+            tgt_units = self.tgt_aligner.align(src_units, masked_tgt, embed_func)
+            
+            logger.debug(f"번역문 DP 정렬 결과 ({len(tgt_units)}개): {tgt_units}")
+
+            # 5. 언마스킹
+            restored_src_units = []
+            restored_tgt_units = []
+            
+            for src_unit in src_units:
+                restored_src_units.append(self.text_masker.restore(src_unit, src_masks))
+            
+            for tgt_unit in tgt_units:
+                restored_tgt_units.append(self.text_masker.restore(tgt_unit, tgt_masks))
+
+            # 6. 정렬 수행
+            aligned_pairs = self.text_aligner.align(restored_src_units, restored_tgt_units, embed_func)
+
+            if not aligned_pairs:
+                return src_text, tgt_text, {'error': 'Empty alignment result'}
+
+            # 7. 결과 조합
+            filtered_pairs = []
+            for src_unit, tgt_unit in aligned_pairs:
+                if src_unit.strip() or tgt_unit.strip():
+                    filtered_pairs.append((src_unit, tgt_unit))
+            
+            if not filtered_pairs:
+                return src_text, tgt_text, {'error': 'No valid pairs after processing'}
+
+            final_src_parts, final_tgt_parts = zip(*filtered_pairs)
+            final_source = ' | '.join(final_src_parts)
+            final_target = ' | '.join(final_tgt_parts)
+            
+            processing_info.update({
+                'status': 'success',
+                'units_count': len(filtered_pairs),
+                'src_units': len(src_units),
+                'tgt_units': len(tgt_units)
+            })
+            
+            logger.debug(f"최종 결과:")
+            logger.debug(f"  정렬된 원문: '{final_source}'")
+            logger.debug(f"  정렬된 번역문: '{final_target}'")
+
+            return final_source, final_target, processing_info
+
+        except Exception as e:
+            logger.error(f"이중 분석기 텍스트 정렬 실패: {e}", exc_info=True)
+            return src_text, tgt_text, {'error': str(e)}
