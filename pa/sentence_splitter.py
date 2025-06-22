@@ -371,27 +371,27 @@ def find_semantic_split_near_position(text: str, target_pos: int) -> int:
 
 def merge_low_chinese_segments(sentences: List[str]) -> List[str]:
     """한자 3개 이하 세그먼트 병합 (✅ regex 사용)"""
-    
     if not sentences:
         return []
     
     merged, buffer = [], ''
     
     for sent in sentences:
-        # ✅ regex로 한자 개수 계산
         han_count = len(regex.findall(r'\p{Han}', sent))
         
         if han_count <= 3:
-            # 한자 3개 이하면 buffer에 추가
-            buffer += sent
+            # 한자 3개 이하면 buffer에 추가 (공백 추가)
+            if buffer:
+                buffer += ' ' + sent
+            else:
+                buffer = sent
         else:
             # 한자 많으면 독립 처리
             if buffer:
                 if merged:
-                    # 이전 문장에 병합
-                    merged[-1] += buffer
+                    # 이전 문장에 병합 (공백 추가)
+                    merged[-1] += ' ' + buffer
                 else:
-                    # 첫 문장이면 그대로 추가
                     merged.append(buffer)
                 buffer = ''
             merged.append(sent)
@@ -399,7 +399,7 @@ def merge_low_chinese_segments(sentences: List[str]) -> List[str]:
     # 남은 buffer 처리
     if buffer:
         if merged:
-            merged[-1] += buffer
+            merged[-1] += ' ' + buffer
         else:
             merged.append(buffer)
     
