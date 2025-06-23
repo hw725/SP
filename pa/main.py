@@ -60,6 +60,8 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--device", default="cuda", help="임베더 연산 디바이스 (cuda/gpu/cpu, 기본값: cuda)")  # 기본값을 cuda로 변경
     parser.add_argument("--splitter", default="spacy", choices=["spacy", "stanza"], help="문장 분할기 선택")
+    parser.add_argument("--openai-model", default="text-embedding-3-large", help="OpenAI 임베딩 모델명")
+    parser.add_argument("--openai-api-key", default=None, help="OpenAI API 키 (미입력시 환경변수 사용)")
 
     args = parser.parse_args()
     
@@ -88,7 +90,9 @@ def main():
             max_length=args.max_length,
             similarity_threshold=args.threshold,
             device=args.device,
-            splitter=args.splitter   # splitter 인자 전달
+            splitter=args.splitter,
+            openai_model=args.openai_model,
+            openai_api_key=args.openai_api_key
         )
         
         if result_df is not None:

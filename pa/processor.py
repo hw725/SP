@@ -172,7 +172,9 @@ def process_paragraph_file(
     max_length: int = 150,
     similarity_threshold: float = 0.3,
     device: str = "cuda",
-    splitter: str = "spacy"   # splitter 인자 추가
+    splitter: str = "spacy",
+    openai_model: str = None,
+    openai_api_key: str = None
 ):
     """파일 단위 처리 (메인 함수)"""
     
@@ -198,7 +200,12 @@ def process_paragraph_file(
     
     # 임베더 로드
     try:
-        embed_func = get_embedder_function(embedder_name, device=device)
+        embed_func = get_embedder_function(
+            embedder_name, 
+            device=device,
+            openai_model=openai_model,
+            openai_api_key=openai_api_key
+        )
         print(f"🧠 임베더 로드 완료: {embedder_name} (device={device})")
     except Exception as e:
         print(f"❌ 임베더 로드 실패: {e}")

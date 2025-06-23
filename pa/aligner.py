@@ -9,12 +9,12 @@ from typing import List, Dict
 from sentence_splitter import split_target_sentences_advanced, split_source_with_spacy
 
 # ✅ SA 임베더 직접 import
-def get_embedder_function(embedder_name: str, device: str = "cpu"):
+def get_embedder_function(embedder_name: str, device: str = "cpu", openai_model: str = None, openai_api_key: str = None):
     """SA 임베더 함수 직접 로드 (GPU 지원)"""
     if embedder_name == 'bge':
         from sa_embedders.bge import compute_embeddings_with_cache
         def embed_func(texts):
-            return compute_embeddings_with_cache(texts)  # device 인자 제거!
+            return compute_embeddings_with_cache(texts)
         return embed_func
     elif embedder_name == 'st':
         try:
@@ -28,9 +28,15 @@ def get_embedder_function(embedder_name: str, device: str = "cpu"):
     elif embedder_name == 'openai':
         try:
             from sa_embedders.openai import compute_embeddings_with_cache
+            import os
+            if openai_api_key:
+                os.environ["OPENAI_API_KEY"] = openai_api_key
             def embed_func(texts):
                 try:
-                    return compute_embeddings_with_cache(texts)
+                    return compute_embeddings_with_cache(
+                        texts, 
+                        model=openai_model if openai_model else "text-embedding-3-large"
+                    )
                 except Exception as e:
                     print(f"⚠️ OpenAI 임베더 실패: {e}")
                     print("➡️ BGE-m3 fallback")

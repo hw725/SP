@@ -81,6 +81,8 @@ def process_file(
     max_tokens: int = 10,
     save_results: bool = True,
     output_file: Optional[str] = None,
+    openai_model: str = "text-embedding-3-large",      # 추가
+    openai_api_key: Optional[str] = None,              # 추가
     **kwargs
 ) -> Optional[pd.DataFrame]:
     """파일 처리 함수 - 진행률 표시 포함"""
@@ -142,9 +144,13 @@ def process_file(
                 # 3. 정렬
                 progress_bar.set_postfix_str("토큰 정렬...")
                 alignments = align_tokens(
-                    src_units, 
+                    src_units,
                     tgt_units,
-                    embed_func=compute_embeddings_with_cache
+                    embed_func=lambda x: compute_embeddings_with_cache(
+                        x,
+                        model=openai_model,
+                        api_key=openai_api_key
+                    ) if use_semantic else None
                 )
                 
                 # 4. 괄호 처리
@@ -240,6 +246,8 @@ def process_file_with_modules(
     use_semantic: bool = True,
     min_tokens: int = 1,
     max_tokens: int = 10,
+    openai_model: str = "text-embedding-3-large",      # 추가
+    openai_api_key: Optional[str] = None,              # 추가
     **kwargs
 ):
     """모듈을 동적으로 받아서 처리하는 함수 - 진행률 표시 포함"""
@@ -250,7 +258,11 @@ def process_file_with_modules(
         # 동적 함수 가져오기
         split_src = tokenizer_module.split_src_meaning_units
         split_tgt = tokenizer_module.split_tgt_meaning_units
-        embed_func = embedder_module.compute_embeddings_with_cache
+        embed_func = lambda x: embedder_module.compute_embeddings_with_cache(
+            x,
+            model=openai_model,
+            api_key=openai_api_key
+        ) if use_semantic else None
         
         from io_utils import load_excel_file, save_alignment_results
         
@@ -286,17 +298,17 @@ def process_file_with_modules(
                 progress_bar.set_postfix_str("토크나이징...")
                 src_units = split_src(src_text, min_tokens, max_tokens)
                 tgt_units = split_tgt(
-                    src_text, tgt_text, 
+                    src_text, tgt_text,
                     use_semantic=use_semantic,
-                    embed_func=embed_func if use_semantic else None
+                    embed_func=embed_func
                 )
                 
                 # 동적 임베더로 정렬
                 progress_bar.set_postfix_str("정렬...")
                 from aligner import align_tokens_with_embeddings  # 🔧 직접 호출
                 alignments = align_tokens_with_embeddings(
-                    src_units, 
-                    tgt_units, 
+                    src_units,
+                    tgt_units,
                     embed_func=embed_func
                 )
 

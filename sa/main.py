@@ -71,6 +71,8 @@ def process_single_file(
     min_tokens: int = 1,
     max_tokens: int = 10,
     parallel: bool = False,
+    openai_model: str = "text-embedding-3-large",      # 추가
+    openai_api_key: str = None,                        # 추가
     **kwargs
 ) -> bool:
     """단일 파일 처리"""
@@ -90,15 +92,15 @@ def process_single_file(
             
             from processor import process_file
             
-            start_time = time.time()
-            
             results = process_file(
                 input_file,
                 use_semantic=use_semantic,
                 min_tokens=min_tokens,
                 max_tokens=max_tokens,
                 save_results=True,
-                output_file=output_file
+                output_file=output_file,
+                openai_model=openai_model,             # 추가
+                openai_api_key=openai_api_key          # 추가
             )
             
         else:
@@ -112,15 +114,13 @@ def process_single_file(
             
             from processor import process_file_with_modules
             
-            start_time = time.time()
-            
             results = process_file_with_modules(
                 input_file, output_file,
                 tokenizer_module, embedder_module,
-                use_semantic, min_tokens, max_tokens
+                use_semantic, min_tokens, max_tokens,
+                openai_model=openai_model,             # 추가
+                openai_api_key=openai_api_key          # 추가
             )
-        
-        end_time = time.time()
         
         if results is not None:
             print(f"🎉 처리 완료!")
@@ -203,6 +203,9 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='상세 로그 출력')
     
+    parser.add_argument('--openai-model', default="text-embedding-3-large", help='OpenAI 임베딩 모델명')
+    parser.add_argument('--openai-api-key', default=None, help='OpenAI API 키')
+
     args = parser.parse_args()
     
     # 로깅 설정
@@ -222,7 +225,9 @@ def main():
         use_semantic=not args.no_semantic,
         min_tokens=args.min_tokens,
         max_tokens=args.max_tokens,
-        parallel=args.parallel
+        parallel=args.parallel,
+        openai_model=args.openai_model,
+        openai_api_key=args.openai_api_key
     )
     
     if success:
