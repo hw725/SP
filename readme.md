@@ -65,7 +65,7 @@ python pa/main.py ...
 
 ## 문제 해결
 
-- 오류 발생 시 [Issues](https://github.com/your-repo/issues)로 문의
+- 오류 발생 시 [Issues](https://github.com/hw725/CSP/issues)로 문의
 - spaCy/stanza 모델은 최초 실행 시 자동 다운로드
 
 ---
