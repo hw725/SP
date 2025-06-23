@@ -9,7 +9,7 @@
 - **pa_gui.exe** : 문단(Paragraph) 정렬용 GUI
 - **sa_gui.exe** : 문장(Sentence) 정렬용 GUI
 
-> 최신 실행파일은 [Releases](https://github.com/your-repo/releases)에서 다운로드하세요.
+> 최신 실행파일은 [Releases](https://github.com/hw725/CSP/releases)에서 다운로드하세요.
 
 ### 사용법
 1. exe 파일을 더블클릭하여 실행
