@@ -157,7 +157,6 @@ def handle_parentheses(text: str) -> str:
 
 def extract_brackets(text: str) -> List[str]:
     """괄호 내용 추출"""
-    import re
     
     brackets = []
     

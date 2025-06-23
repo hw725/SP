@@ -258,7 +258,7 @@ def split_tgt_by_src_units_semantic(
     embed_func: Callable, 
     min_tokens: int = DEFAULT_MIN_TOKENS
 ) -> List[str]:
-    """원문 단위에 따른 번역문 분할 (의미 기반)"""
+    """원문 단위에 따른 번역문 분할 (의미 기반, 임베딩 batch 처리)"""
     tgt_tokens = tgt_text.split()
     N, T = len(src_units), len(tgt_tokens)
     if N == 0 or T == 0:
@@ -270,11 +270,35 @@ def split_tgt_by_src_units_semantic(
 
     src_embs = embed_func(src_units)
 
+    # 1. 모든 후보 span을 미리 수집 (strip, 중복 완전 제거)
+    span_map = {}  # (k, j) -> span string
+    all_spans = []
     for i in range(1, N+1):
         for j in range(i*min_tokens, T-(N-i)*min_tokens+1):
             for k in range((i-1)*min_tokens, j-min_tokens+1):
-                span = " ".join(tgt_tokens[k:j])
-                tgt_emb = embed_func([span])[0]
+                span = " ".join(tgt_tokens[k:j]).strip()
+                key = (k, j)
+                if span and key not in span_map:
+                    span_map[key] = span
+                    all_spans.append(span)
+    all_spans = list(set(all_spans))
+
+    # 2. batch 100개 제한 처리 (embed_func가 내부적으로 지원하지 않으면)
+    def batch_embed(spans, batch_size=100):
+        results = []
+        for i in range(0, len(spans), batch_size):
+            results.extend(embed_func(spans[i:i+batch_size]))
+        return results
+    span_embs = batch_embed(all_spans)
+
+    span_emb_dict = {span: emb for span, emb in zip(all_spans, span_embs)}
+
+    # 3. DP 계산 (임베딩 재사용)
+    for i in range(1, N+1):
+        for j in range(i*min_tokens, T-(N-i)*min_tokens+1):
+            for k in range((i-1)*min_tokens, j-min_tokens+1):
+                span = span_map[(k, j)]
+                tgt_emb = span_emb_dict[span]
                 sim = float(np.dot(src_embs[i-1], tgt_emb)/((np.linalg.norm(src_embs[i-1])*np.linalg.norm(tgt_emb))+1e-8))
                 score = dp[i-1, k] + sim
                 if score > dp[i, j]:

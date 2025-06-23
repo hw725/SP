@@ -99,7 +99,8 @@ def compute_embeddings_batch(
             response = client.embeddings.create(
                 model=model,
                 input=batch_texts,
-                encoding_format="float"
+                encoding_format="float",
+                timeout=60  # 60초 제한
             )
             
             batch_embeddings = [np.array(item.embedding) for item in response.data]
@@ -115,8 +116,9 @@ def compute_embeddings_batch(
 
 def compute_embeddings_with_cache(
     texts: Union[str, List[str]], 
-    model: str = "text-embedding-3-small",
-    use_cache: bool = True
+    model: str = "text-embedding-3-large",
+    use_cache: bool = True,
+    api_key: Optional[str] = None
 ) -> Union[np.ndarray, List[np.ndarray]]:
     """캐시를 사용한 OpenAI 임베딩 생성"""
     
@@ -156,6 +158,23 @@ def compute_embeddings_with_cache(
     new_embeddings = {}
     if missing_texts:
         try:
+            # OpenAI 클라이언트 설정
+            if openai is None:
+                raise ImportError("OpenAI 라이브러리가 설치되지 않았습니다")
+            
+            if api_key:
+                openai.api_key = api_key
+            else:
+                # API 키 확인
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "OPENAI_API_KEY 환경변수가 설정되지 않았습니다.\n"
+                        "Windows: set OPENAI_API_KEY=your-api-key\n"
+                        "Linux/Mac: export OPENAI_API_KEY=your-api-key"
+                    )
+            
+            # 배치 임베딩 생성
             batch_embeddings = compute_embeddings_batch(missing_texts, model)
             
             for i, (idx, embedding) in enumerate(zip(missing_indices, batch_embeddings)):

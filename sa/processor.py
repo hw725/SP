@@ -9,6 +9,7 @@ from io_utils import load_excel_file as load_excel, save_alignment_results as sa
 from sa_tokenizers import split_src_meaning_units, split_tgt_meaning_units
 from sa_embedders import compute_embeddings_with_cache
 from aligner import align_tokens_with_embeddings as align_tokens
+import time
 
 # punctuation import 안전 처리
 try:
@@ -81,8 +82,10 @@ def process_file(
     max_tokens: int = 10,
     save_results: bool = True,
     output_file: Optional[str] = None,
-    openai_model: str = "text-embedding-3-large",      # 추가
-    openai_api_key: Optional[str] = None,              # 추가
+    openai_model: str = "text-embedding-3-large",
+    openai_api_key: Optional[str] = None,
+    progress_callback=None,    # 추가
+    stop_flag=None,            # 추가
     **kwargs
 ) -> Optional[pd.DataFrame]:
     """파일 처리 함수 - 진행률 표시 포함"""
@@ -110,7 +113,14 @@ def process_file(
             ncols=100
         )
         
+        start_time = time.time()  # 시작 시간 기록
+        
         for idx, row in progress_bar:
+            # 중지 플래그 체크
+            if stop_flag and stop_flag.is_set():
+                logger.info("⏹️ 사용자 중지 요청, 처리 중단")
+                break
+
             # 진행률 바 설명 업데이트
             progress_bar.set_description(f"🔤 문장 {idx+1}/{total_sentences}")
             
@@ -204,6 +214,8 @@ def process_file(
         # 진행률 바 완료
         progress_bar.close()
         
+        end_time = time.time()  # 종료 시간 기록
+        
         if not results:
             logger.error("❌ 처리된 결과가 없습니다")
             return None
@@ -231,6 +243,7 @@ def process_file(
         print(f"   ✅ 성공: {success_count}")
         print(f"   ❌ 실패: {total_processed - success_count}")
         print(f"   📈 성공률: {success_count/total_processed*100:.1f}%")
+        print(f"⏱️  처리 시간: {end_time - start_time:.2f}초")  # 처리 시간 출력
         
         return results_df
         
@@ -243,11 +256,12 @@ def process_file_with_modules(
     output_file: str,
     tokenizer_module,
     embedder_module,
+    embedder_name: str,  # 이 줄 추가!
     use_semantic: bool = True,
     min_tokens: int = 1,
     max_tokens: int = 10,
-    openai_model: str = "text-embedding-3-large",      # 추가
-    openai_api_key: Optional[str] = None,              # 추가
+    openai_model: str = "text-embedding-3-large",
+    openai_api_key: Optional[str] = None,
     **kwargs
 ):
     """모듈을 동적으로 받아서 처리하는 함수 - 진행률 표시 포함"""
@@ -258,11 +272,14 @@ def process_file_with_modules(
         # 동적 함수 가져오기
         split_src = tokenizer_module.split_src_meaning_units
         split_tgt = tokenizer_module.split_tgt_meaning_units
-        embed_func = lambda x: embedder_module.compute_embeddings_with_cache(
-            x,
-            model=openai_model,
-            api_key=openai_api_key
-        ) if use_semantic else None
+        embed_func = None
+        if use_semantic:
+            if embedder_name == "openai":
+                embed_func = lambda x: embedder_module.compute_embeddings_with_cache(
+                    x, model=openai_model, api_key=openai_api_key
+                )
+            else:
+                embed_func = lambda x: embedder_module.compute_embeddings_with_cache(x)
         
         from io_utils import load_excel_file, save_alignment_results
         
@@ -283,6 +300,8 @@ def process_file_with_modules(
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
             ncols=100
         )
+        
+        start_time = time.time()  # 시작 시간 기록
         
         for idx, row in progress_bar:
             progress_bar.set_description(f"🔤 문장 {idx+1}/{total_sentences}")
@@ -334,7 +353,10 @@ def process_file_with_modules(
         results_df = pd.DataFrame(results)
         save_alignment_results(results_df, output_file)
         
+        end_time = time.time()  # 종료 시간 기록
+        
         print(f"\n🎉 동적 처리 완료: {len(results)}개 문장")
+        print(f"⏱️  처리 시간: {end_time - start_time:.2f}초")  # 처리 시간 출력
         return results_df
         
     except Exception as e:

@@ -1,16 +1,31 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import threading
+
+# 중지 플래그
+stop_flag = threading.Event()
 
 def run_sa(input_file, output_file, tgt_tokenizer, embedder, min_tokens, max_tokens, use_semantic, parallel, verbose, openai_model, openai_api_key):
     try:
         from main import main
         import sys
+
+        progress_var.set(0)
+        progress_bar.update()
+
+        def progress_callback(current, total):
+            percent = int((current / total) * 100)
+            progress_var.set(percent)
+            progress_bar.update()
+            # 중지 요청 시 예외 발생
+            if stop_flag.is_set():
+                raise KeyboardInterrupt("사용자에 의해 중지됨")
+
         sys.argv = [
             "main.py",
             input_file,
             output_file,
-            "--tokenizer", tgt_tokenizer,  # 번역문 토크나이저만 선택
+            "--tokenizer", tgt_tokenizer,
             "--embedder", embedder,
             "--min-tokens", str(min_tokens),
             "--max-tokens", str(max_tokens),
@@ -27,12 +42,19 @@ def run_sa(input_file, output_file, tgt_tokenizer, embedder, min_tokens, max_tok
             ]
             if openai_api_key:
                 sys.argv += ["--openai-api-key", openai_api_key]
-        main()
+        sys.argv.append("--save-phrase")
+        # main 함수에 progress_callback, stop_flag 전달 필요 (main/processor에서 지원해야 함)
+        main(progress_callback=progress_callback, stop_flag=stop_flag)
+        progress_var.set(100)
+        progress_bar.update()
         messagebox.showinfo("완료", "SA 처리가 완료되었습니다.")
+    except KeyboardInterrupt:
+        messagebox.showinfo("중지", "사용자에 의해 처리가 중지되었습니다.")
     except Exception as e:
         messagebox.showerror("오류", f"실행 중 오류 발생: {e}")
 
 def start_sa():
+    stop_flag.clear()
     input_file = input_entry.get()
     output_file = output_entry.get()
     tgt_tokenizer = tgt_tokenizer_var.get()
@@ -47,9 +69,14 @@ def start_sa():
     if not input_file or not output_file:
         messagebox.showerror("오류", "입력/출력 파일을 지정하세요.")
         return
+    progress_var.set(0)
+    progress_bar.update()
     threading.Thread(target=run_sa, args=(
         input_file, output_file, tgt_tokenizer, embedder, min_tokens, max_tokens, use_semantic, parallel, verbose, openai_model, openai_api_key
     )).start()
+
+def stop_sa():
+    stop_flag.set()
 
 def toggle_openai_options(*args):
     if embedder_var.get() == "openai":
@@ -121,6 +148,12 @@ openai_api_key_var = tk.StringVar()
 openai_api_key_entry = tk.Entry(root, textvariable=openai_api_key_var, show="*")
 
 tk.Button(root, text="실행", command=start_sa).grid(row=12, column=1, pady=10)
+tk.Button(root, text="중지", command=stop_sa).grid(row=12, column=2, pady=10)
+
+# 진행률 바 추가
+progress_var = tk.IntVar()
+progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=300)
+progress_bar.grid(row=13, column=0, columnspan=3, pady=10)
 
 # 임베더 선택 시 OpenAI 옵션 표시/숨김
 embedder_var.trace_add("write", toggle_openai_options)

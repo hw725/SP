@@ -20,26 +20,51 @@ def improved_align_paragraphs(
     similarity_threshold: float = 0.3
 ) -> List[Dict]:
     """개선된 정렬 - 1:1 매칭 보장"""
-    
     from sklearn.metrics.pairwise import cosine_similarity
-    
+    import numpy as np
+
     if not tgt_sentences or not src_chunks:
         return []
-    
-    # 임베딩 생성 (항상 numpy array로 변환)
-    tgt_embeddings = np.array(embed_func(tgt_sentences))
-    src_embeddings = np.array(embed_func(src_chunks))
+
+    # 임베딩 생성 (항상 numpy array로 변환, shape 보정)
+    def safe_embed(texts):
+        embs = embed_func(texts)
+        # 리스트로 반환되는 경우 처리
+        if isinstance(embs, np.ndarray):
+            if embs.ndim == 1:
+                embs = embs.reshape(1, -1)
+            return embs
+        # 리스트/튜플인 경우
+        arrs = []
+        for i, emb in enumerate(embs):
+            if emb is None:
+                print(f"⚠️ 임베딩 None 발생, 0벡터로 대체: {texts[i]}")
+                arrs.append(np.zeros(768))  # 768은 일반적인 임베딩 차원, 필요시 자동 추정
+            else:
+                arr = np.array(emb)
+                if arr.ndim != 1:
+                    print(f"⚠️ 임베딩 차원 이상: {arr.shape}, 0벡터로 대체")
+                    arrs.append(np.zeros(768))
+                else:
+                    arrs.append(arr)
+        # 모든 벡터의 차원을 맞춤
+        dim = max(arr.shape[0] for arr in arrs)
+        arrs = [a if a.shape[0] == dim else np.pad(a, (0, dim - a.shape[0])) for a in arrs]
+        return np.stack(arrs, axis=0)
+
+    tgt_embeddings = safe_embed(tgt_sentences)
+    src_embeddings = safe_embed(src_chunks)
 
     # 임베딩 차원 체크
     if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
         print(f"❌ 임베딩 차원 불일치: tgt={tgt_embeddings.shape}, src={src_embeddings.shape}")
         return []
-    
+
     # 유사도 매트릭스 계산
     sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
-    
+
     alignments = []
-    
+
     # ✅ 개선된 정렬: 길이에 따라 전략 선택
     if len(tgt_sentences) == len(src_chunks):
         # 1:1 순서 매칭
@@ -51,19 +76,19 @@ def improved_align_paragraphs(
                 'split_method': 'spacy_lg',
                 'align_method': 'sequential_1to1'
             })
-    
+
     elif len(tgt_sentences) > len(src_chunks):
         # 번역문이 더 많음: 원문을 여러 번역문에 분배
         alignments = distribute_sources_to_targets(
             tgt_sentences, src_chunks, sim_matrix, 'target_rich'
         )
-    
+
     else:
         # 원문이 더 많음: 번역문을 여러 원문에 분배
         alignments = distribute_targets_to_sources(
             tgt_sentences, src_chunks, sim_matrix, 'source_rich'
         )
-    
+
     return alignments
 
 def distribute_sources_to_targets(
@@ -174,7 +199,9 @@ def process_paragraph_file(
     device: str = "cuda",
     splitter: str = "spacy",
     openai_model: str = None,
-    openai_api_key: str = None
+    openai_api_key: str = None,
+    progress_callback=None,
+    stop_flag=None
 ):
     """파일 단위 처리 (메인 함수)"""
     
@@ -213,17 +240,18 @@ def process_paragraph_file(
         embed_func = fallback_embedder_bge(device)
     
     all_results = []
-    
+    total = len(df)
     for idx, row in df.iterrows():
+        if stop_flag and stop_flag.is_set():
+            print("⏹️ 사용자 중지 요청, 처리 중단")
+            break
         src_paragraph = str(row.get('원문', '')).strip()
         tgt_paragraph = str(row.get('번역문', '')).strip()
-        
         if not src_paragraph or not tgt_paragraph:
             print(f"⚠️ 빈 내용 건너뜀: 행 {idx + 1}")
             continue
-        
         try:
-            print(f"📝 처리 중: 문단 {idx + 1}/{len(df)}")
+            print(f"📝 처리 중: 문단 {idx + 1}/{total}")
             
             # 문장 분할
             tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter=splitter)
@@ -243,9 +271,10 @@ def process_paragraph_file(
             # 문단식별자 업데이트
             for result in alignments:
                 result['문단식별자'] = idx + 1
-            
             all_results.extend(alignments)
-            
+            # 진행률 콜백 호출
+            if progress_callback:
+                progress_callback(idx + 1, total)
         except Exception as e:
             print(f"❌ 문단 {idx + 1} 처리 실패: {e}")
             import traceback

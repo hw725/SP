@@ -43,7 +43,7 @@ def check_dependencies():
     
     return True
 
-def main():
+def main(progress_callback=None, stop_flag=None):
     print("🚀 PA (Paragraph Aligner) 시작")
     
     # 의존성 확인
@@ -82,7 +82,7 @@ def main():
     
     try:
         from processor import process_paragraph_file
-        
+
         result_df = process_paragraph_file(
             args.input_file,
             args.output_file,
@@ -92,7 +92,9 @@ def main():
             device=args.device,
             splitter=args.splitter,
             openai_model=args.openai_model,
-            openai_api_key=args.openai_api_key
+            openai_api_key=args.openai_api_key,
+            progress_callback=progress_callback,
+            stop_flag=stop_flag
         )
         
         if result_df is not None:

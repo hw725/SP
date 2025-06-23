@@ -73,10 +73,15 @@ def process_single_file(
     parallel: bool = False,
     openai_model: str = "text-embedding-3-large",      # 추가
     openai_api_key: str = None,                        # 추가
+    progress_callback=None,                            # 추가
+    stop_flag=None,                                    # 추가
     **kwargs
 ) -> bool:
     """단일 파일 처리"""
-    
+
+    import time
+    start_time = time.time()  # ⏱️ 처리 시작 시간 기록
+
     print(f"🚀 파일 처리 시작: {input_file}")
     print(f"📊 설정:")
     print(f"   토크나이저: {tokenizer_name}")
@@ -84,14 +89,14 @@ def process_single_file(
     print(f"   의미 매칭: {use_semantic}")
     print(f"   병렬 처리: {parallel}")
     print(f"   토큰 범위: {min_tokens}-{max_tokens}")
-    
+
     try:
         # 🔧 수정: 기본 토크나이저는 동적 로딩 없이 바로 처리
         if tokenizer_name == 'jieba' and embedder_name == 'st':
             print("✅ 기본 모듈 사용 (jieba + sentence_transformer)")
-            
+
             from processor import process_file
-            
+
             results = process_file(
                 input_file,
                 use_semantic=use_semantic,
@@ -102,56 +107,59 @@ def process_single_file(
                 openai_model=openai_model,             # 추가
                 openai_api_key=openai_api_key          # 추가
             )
-            
+
         else:
             print("✅ 동적 모듈 로딩...")
-            
+
             # 동적 모듈 로드
             tokenizer_module = get_tokenizer_module(tokenizer_name)
             embedder_module = get_embedder_module(embedder_name)
-            
+
             print(f"✅ 모듈 로드 완료")
-            
+
             from processor import process_file_with_modules
-            
+
             results = process_file_with_modules(
                 input_file, output_file,
                 tokenizer_module, embedder_module,
+                embedder_name,  # 추가!
                 use_semantic, min_tokens, max_tokens,
-                openai_model=openai_model,             # 추가
-                openai_api_key=openai_api_key          # 추가
+                openai_model=openai_model,
+                openai_api_key=openai_api_key
             )
-        
+
+        end_time = time.time()  # ⏱️ 처리 종료 시간 기록
+
         if results is not None:
             print(f"🎉 처리 완료!")
             print(f"⏱️  처리 시간: {end_time - start_time:.2f}초")
             print(f"📊 처리 결과: {len(results)}개 문장")
             print(f"📁 출력 파일: {output_file}")
-            
+
             # 기본 형식 저장
             output_file_basic = output_file
-            
+
             # 구 단위 형식 저장
             output_file_phrase = output_file.replace('.xlsx', '_phrase.xlsx')
-            
+
             from io_utils import save_phrase_format_results
             save_phrase_format_results(results, output_file_phrase)
-            
+
             print(f"📁 기본 출력: {output_file_basic}")
             print(f"📁 구 단위 출력: {output_file_phrase}")
-            
+
             return True
         else:
             print(f"❌ 처리 실패")
             return False
-            
+
     except Exception as e:
         print(f"💥 처리 오류: {e}")
         import traceback
         traceback.print_exc()
         return False
 
-def main():
+def main(progress_callback=None, stop_flag=None):
     """메인 함수"""
     parser = argparse.ArgumentParser(
         description='SA 정렬 시스템 - 문장 단위 토큰 정렬',
@@ -205,6 +213,7 @@ def main():
     
     parser.add_argument('--openai-model', default="text-embedding-3-large", help='OpenAI 임베딩 모델명')
     parser.add_argument('--openai-api-key', default=None, help='OpenAI API 키')
+    parser.add_argument('--save-phrase', action='store_true', default=True, help='구 단위 결과도 저장')
 
     args = parser.parse_args()
     
@@ -227,7 +236,9 @@ def main():
         max_tokens=args.max_tokens,
         parallel=args.parallel,
         openai_model=args.openai_model,
-        openai_api_key=args.openai_api_key
+        openai_api_key=args.openai_api_key,
+        progress_callback=progress_callback,
+        stop_flag=stop_flag
     )
     
     if success:
