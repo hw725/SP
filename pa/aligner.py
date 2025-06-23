@@ -9,21 +9,21 @@ from typing import List, Dict
 from sentence_splitter import split_target_sentences_advanced, split_source_with_spacy
 
 # ✅ SA 임베더 직접 import
-def get_embedder_function(embedder_name: str):
-    """SA 임베더 함수 직접 로드"""
+def get_embedder_function(embedder_name: str, device: str = "cpu"):
+    """SA 임베더 함수 직접 로드 (GPU 지원)"""
     
     if embedder_name == 'bge':
-        try:
-            from sa_embedders.bge import compute_embeddings_with_cache
-            return compute_embeddings_with_cache
-        except ImportError:
-            print("❌ BGE 임베더 import 실패")
-            return fallback_embedder
+        from sa_embedders.bge import compute_embeddings_with_cache
+        def embed_func(texts):
+            return compute_embeddings_with_cache(texts, device=device)  # ❌ 여기서 device 넘김
+        return embed_func
             
     elif embedder_name == 'st':
         try:
             from sa_embedders.sentence_transformer import compute_embeddings_with_cache
-            return compute_embeddings_with_cache
+            def embed_func(texts):
+                return compute_embeddings_with_cache(texts, device=device)
+            return embed_func
         except ImportError:
             print("❌ SentenceTransformer 임베더 import 실패")
             return fallback_embedder
@@ -31,6 +31,7 @@ def get_embedder_function(embedder_name: str):
     elif embedder_name == 'openai':
         try:
             from sa_embedders.openai import compute_embeddings_with_cache
+            # OpenAI는 device 파라미터 무시
             return compute_embeddings_with_cache
         except ImportError:
             print("❌ OpenAI 임베더 import 실패")
@@ -214,9 +215,10 @@ def process_paragraph_alignment(
     tgt_paragraph: str, 
     embedder_name: str = 'bge',
     max_length: int = 150,
-    similarity_threshold: float = 0.3
+    similarity_threshold: float = 0.3,
+    device: str = "cpu"
 ):
-    """PA 처리 (SA DP 연동)"""
+    """PA 처리 (SA DP 연동, GPU 지원)"""
     
     print(f"🔄 PA 처리 시작")
     
@@ -227,8 +229,8 @@ def process_paragraph_alignment(
     print(f"   번역문: {len(tgt_sentences)}개 문장")
     print(f"   원문: {len(src_chunks)}개 청크")
     
-    # 2. 임베더 로드
-    embed_func = get_embedder_function(embedder_name)
+    # 2. 임베더 로드 (device 전달)
+    embed_func = get_embedder_function(embedder_name, device=device)
     
     # 3. SA DP 정렬
     alignments = align_paragraphs_with_sa_dp(
@@ -245,9 +247,10 @@ def process_paragraph_file(
     output_file: str, 
     embedder_name: str = 'bge',
     max_length: int = 150,
-    similarity_threshold: float = 0.3
+    similarity_threshold: float = 0.3,
+    device: str = "cpu"
 ):
-    """파일 단위 처리 - 올바른 컬럼명"""
+    """파일 단위 처리 - GPU 지원"""
     
     print(f"📂 파일 처리 시작: {input_file}")
     
@@ -268,7 +271,8 @@ def process_paragraph_file(
                 tgt_paragraph,
                 embedder_name=embedder_name,
                 max_length=max_length,
-                similarity_threshold=similarity_threshold
+                similarity_threshold=similarity_threshold,
+                device=device
             )
             
             # 문단식별자 업데이트

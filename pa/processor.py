@@ -4,28 +4,39 @@ import pandas as pd
 from typing import List, Dict
 import numpy as np
 from sentence_splitter import split_target_sentences_advanced, split_source_with_spacy
+import torch
 
-def get_embedder_function(embedder_name: str):
-    """임베더 함수 로드"""
-    
+def get_device(device_preference="cuda"):
+    if device_preference == "cuda" and not torch.cuda.is_available():
+        print("⚠️ CUDA(GPU)를 사용할 수 없습니다. CPU로 전환합니다.")
+        return "cpu"
+    return device_preference
+
+def get_embedder_function(embedder_name: str, device: str = "cpu"):
+    """임베더 함수 로드 (GPU 지원)"""
     if embedder_name == 'bge':
         try:
             import sys
             sys.path.append('../sa')
+            # set_device 함수가 있다면 device를 여기서 지정
             from sa_embedders.bge import compute_embeddings_with_cache
-            return compute_embeddings_with_cache
+            # device 인자를 넘기지 않음!
+            # (임베더 내부에서 device를 이미 지정했다고 가정)
+            def embed_func(texts):
+                return compute_embeddings_with_cache(texts)
+            return embed_func
         except ImportError:
             return fallback_embedder
-            
     elif embedder_name == 'st':
         try:
             import sys
             sys.path.append('../sa')
             from sa_embedders.sentence_transformer import compute_embeddings_with_cache
-            return compute_embeddings_with_cache
+            def embed_func(texts):
+                return compute_embeddings_with_cache(texts)
+            return embed_func
         except ImportError:
             return fallback_embedder
-    
     return fallback_embedder
 
 def fallback_embedder(texts: List[str]):
@@ -199,7 +210,8 @@ def process_paragraph_file(
     output_file: str, 
     embedder_name: str = 'bge',
     max_length: int = 150,
-    similarity_threshold: float = 0.3
+    similarity_threshold: float = 0.3,
+    device: str = "cuda"   # 기본값도 cuda로!
 ):
     """파일 단위 처리 (메인 함수)"""
     
@@ -225,8 +237,8 @@ def process_paragraph_file(
     
     # 임베더 로드
     try:
-        embed_func = get_embedder_function(embedder_name)
-        print(f"🧠 임베더 로드 완료: {embedder_name}")
+        embed_func = get_embedder_function(embedder_name, device=device)
+        print(f"🧠 임베더 로드 완료: {embedder_name} (device={device})")
     except Exception as e:
         print(f"❌ 임베더 로드 실패: {e}")
         embed_func = fallback_embedder

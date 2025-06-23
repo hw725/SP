@@ -58,6 +58,7 @@ def main():
     parser.add_argument("--max-length", type=int, default=150, help="최대 문장 길이")
     parser.add_argument("--parallel", action="store_true", help="병렬 처리 (미구현)")  # ✅ 추가
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--device", default="cuda", help="임베더 연산 디바이스 (cuda/gpu/cpu, 기본값: cuda)")  # 기본값을 cuda로 변경
     
     args = parser.parse_args()
     
@@ -84,7 +85,8 @@ def main():
             args.output_file,
             embedder_name=args.embedder,
             similarity_threshold=args.threshold,
-            max_length=args.max_length
+            max_length=args.max_length,
+            device=args.device   # device 파라미터 전달
         )
         
         if result_df is not None:
