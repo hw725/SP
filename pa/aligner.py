@@ -11,13 +11,11 @@ from sentence_splitter import split_target_sentences_advanced, split_source_with
 # ✅ SA 임베더 직접 import
 def get_embedder_function(embedder_name: str, device: str = "cpu"):
     """SA 임베더 함수 직접 로드 (GPU 지원)"""
-    
     if embedder_name == 'bge':
         from sa_embedders.bge import compute_embeddings_with_cache
         def embed_func(texts):
-            return compute_embeddings_with_cache(texts, device=device)  # ❌ 여기서 device 넘김
+            return compute_embeddings_with_cache(texts)  # device 인자 제거!
         return embed_func
-            
     elif embedder_name == 'st':
         try:
             from sa_embedders.sentence_transformer import compute_embeddings_with_cache
@@ -26,40 +24,39 @@ def get_embedder_function(embedder_name: str, device: str = "cpu"):
             return embed_func
         except ImportError:
             print("❌ SentenceTransformer 임베더 import 실패")
-            return fallback_embedder
-            
+            return fallback_embedder_bge(device)
     elif embedder_name == 'openai':
         try:
             from sa_embedders.openai import compute_embeddings_with_cache
-            # OpenAI는 device 파라미터 무시
-            return compute_embeddings_with_cache
+            def embed_func(texts):
+                try:
+                    return compute_embeddings_with_cache(texts)
+                except Exception as e:
+                    print(f"⚠️ OpenAI 임베더 실패: {e}")
+                    print("➡️ BGE-m3 fallback")
+                    return fallback_embedder_bge(device)(texts)
+            return embed_func
         except ImportError:
             print("❌ OpenAI 임베더 import 실패")
-            return fallback_embedder
-    
-    return fallback_embedder
+            return fallback_embedder_bge(device)
+    return fallback_embedder_bge(device)
 
-def fallback_embedder(texts: List[str]):
-    """대체 임베더 - TF-IDF 기반"""
-    
-    import numpy as np
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    
-    if not texts:
-        return np.array([]).reshape(0, 512)
-    
-    try:
-        vectorizer = TfidfVectorizer(max_features=512, ngram_range=(1, 2))
-        embeddings = vectorizer.fit_transform(texts).toarray()
-        
-        # L2 정규화
-        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        embeddings = embeddings / (norms + 1e-8)
-        
-        return embeddings
-    except Exception as e:
-        print(f"⚠️ TF-IDF 임베더 실패: {e}")
-        return np.random.randn(len(texts), 512)
+def fallback_embedder_bge(device: str = "cpu"):
+    """BGE-m3 SentenceTransformer 기반 fallback"""
+    def embed_func(texts):
+        try:
+            from sentence_transformers import SentenceTransformer
+            import torch
+            model = SentenceTransformer('BAAI/bge-m3')
+            dev = "cuda" if device == "cuda" and torch.cuda.is_available() else "cpu"
+            model = model.to(dev)
+            embeddings = model.encode(texts, convert_to_numpy=True, device=dev, show_progress_bar=False)
+            return embeddings
+        except Exception as e:
+            print(f"❌ BGE-m3 fallback 실패: {e}")
+            import numpy as np
+            return np.random.randn(len(texts), 1024)  # BGE-m3 기본 차원(1024)
+    return embed_func
 
 def align_paragraphs_with_sa_dp(
     tgt_sentences: List[str], 
@@ -150,17 +147,17 @@ def advanced_align_paragraphs(
     similarity_threshold: float = 0.3
 ) -> List[Dict]:
     """고품질 대체 정렬 (DP 스타일)"""
-    
     from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
-    
-    # 임베딩 생성
+
     tgt_embeddings = embed_func(tgt_sentences)
     src_embeddings = embed_func(src_chunks)
-    
-    # 유사도 매트릭스 계산
-    sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
-    
+
+    # 임베딩 차원 체크
+    if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
+        print(f"❌ 임베딩 차원 불일치: tgt={tgt_embeddings.shape}, src={src_embeddings.shape}")
+        return []
+
     # ✅ DP 스타일 정렬 (순서 보존 + 무결성 보장)
     alignments = []
     used_src_indices = set()

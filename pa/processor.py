@@ -5,58 +5,13 @@ from typing import List, Dict
 import numpy as np
 from sentence_splitter import split_target_sentences_advanced, split_source_with_spacy
 import torch
+from aligner import get_embedder_function  # ✅ aligner의 임베더 함수만 사용
 
 def get_device(device_preference="cuda"):
     if device_preference == "cuda" and not torch.cuda.is_available():
         print("⚠️ CUDA(GPU)를 사용할 수 없습니다. CPU로 전환합니다.")
         return "cpu"
     return device_preference
-
-def get_embedder_function(embedder_name: str, device: str = "cpu"):
-    """임베더 함수 로드 (GPU 지원)"""
-    if embedder_name == 'bge':
-        try:
-            import sys
-            sys.path.append('../sa')
-            # set_device 함수가 있다면 device를 여기서 지정
-            from sa_embedders.bge import compute_embeddings_with_cache
-            # device 인자를 넘기지 않음!
-            # (임베더 내부에서 device를 이미 지정했다고 가정)
-            def embed_func(texts):
-                return compute_embeddings_with_cache(texts)
-            return embed_func
-        except ImportError:
-            return fallback_embedder
-    elif embedder_name == 'st':
-        try:
-            import sys
-            sys.path.append('../sa')
-            from sa_embedders.sentence_transformer import compute_embeddings_with_cache
-            def embed_func(texts):
-                return compute_embeddings_with_cache(texts)
-            return embed_func
-        except ImportError:
-            return fallback_embedder
-    return fallback_embedder
-
-def fallback_embedder(texts: List[str]):
-    """대체 임베더 - TF-IDF"""
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    
-    if not texts:
-        return np.array([]).reshape(0, 512)
-    
-    try:
-        vectorizer = TfidfVectorizer(max_features=512, ngram_range=(1, 2))
-        embeddings = vectorizer.fit_transform(texts).toarray()
-        
-        # L2 정규화
-        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        embeddings = embeddings / (norms + 1e-8)
-        
-        return embeddings
-    except Exception:
-        return np.random.randn(len(texts), 512)
 
 def improved_align_paragraphs(
     tgt_sentences: List[str], 
@@ -71,9 +26,14 @@ def improved_align_paragraphs(
     if not tgt_sentences or not src_chunks:
         return []
     
-    # 임베딩 생성
-    tgt_embeddings = embed_func(tgt_sentences)
-    src_embeddings = embed_func(src_chunks)
+    # 임베딩 생성 (항상 numpy array로 변환)
+    tgt_embeddings = np.array(embed_func(tgt_sentences))
+    src_embeddings = np.array(embed_func(src_chunks))
+
+    # 임베딩 차원 체크
+    if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
+        print(f"❌ 임베딩 차원 불일치: tgt={tgt_embeddings.shape}, src={src_embeddings.shape}")
+        return []
     
     # 유사도 매트릭스 계산
     sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
@@ -241,7 +201,8 @@ def process_paragraph_file(
         print(f"🧠 임베더 로드 완료: {embedder_name} (device={device})")
     except Exception as e:
         print(f"❌ 임베더 로드 실패: {e}")
-        embed_func = fallback_embedder
+        from aligner import fallback_embedder_bge
+        embed_func = fallback_embedder_bge(device)
     
     all_results = []
     
