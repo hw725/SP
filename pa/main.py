@@ -59,7 +59,8 @@ def main():
     parser.add_argument("--parallel", action="store_true", help="병렬 처리 (미구현)")  # ✅ 추가
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--device", default="cuda", help="임베더 연산 디바이스 (cuda/gpu/cpu, 기본값: cuda)")  # 기본값을 cuda로 변경
-    
+    parser.add_argument("--splitter", default="spacy", choices=["spacy", "stanza"], help="문장 분할기 선택")
+
     args = parser.parse_args()
     
     # 병렬 처리 경고
@@ -84,9 +85,10 @@ def main():
             args.input_file,
             args.output_file,
             embedder_name=args.embedder,
-            similarity_threshold=args.threshold,
             max_length=args.max_length,
-            device=args.device   # device 파라미터 전달
+            similarity_threshold=args.threshold,
+            device=args.device,
+            splitter=args.splitter   # splitter 인자 전달
         )
         
         if result_df is not None:

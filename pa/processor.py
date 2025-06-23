@@ -171,7 +171,8 @@ def process_paragraph_file(
     embedder_name: str = 'bge',
     max_length: int = 150,
     similarity_threshold: float = 0.3,
-    device: str = "cuda"   # 기본값도 cuda로!
+    device: str = "cuda",
+    splitter: str = "spacy"   # splitter 인자 추가
 ):
     """파일 단위 처리 (메인 함수)"""
     
@@ -218,8 +219,8 @@ def process_paragraph_file(
             print(f"📝 처리 중: 문단 {idx + 1}/{len(df)}")
             
             # 문장 분할
-            tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length)
-            src_chunks = split_source_with_spacy(src_paragraph, tgt_sentences)
+            tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter=splitter)
+            src_chunks = split_source_with_spacy(src_paragraph, tgt_sentences, splitter=splitter)
             
             print(f"   번역문: {len(tgt_sentences)}개 문장")
             print(f"   원문: {len(src_chunks)}개 청크")

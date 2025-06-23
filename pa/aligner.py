@@ -220,8 +220,8 @@ def process_paragraph_alignment(
     print(f"🔄 PA 처리 시작")
     
     # 1. 분할
-    tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length)
-    src_chunks = split_source_with_spacy(src_paragraph, len(tgt_sentences))
+    tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="stanza")
+    src_chunks = split_source_with_spacy(src_paragraph, tgt_sentences, splitter="stanza")
     
     print(f"   번역문: {len(tgt_sentences)}개 문장")
     print(f"   원문: {len(src_chunks)}개 청크")
@@ -245,7 +245,8 @@ def process_paragraph_file(
     embedder_name: str = 'bge',
     max_length: int = 150,
     similarity_threshold: float = 0.3,
-    device: str = "cpu"
+    device: str = "cpu",
+    splitter: str = "stanza"  # 기본값 추가
 ):
     """파일 단위 처리 - GPU 지원"""
     
