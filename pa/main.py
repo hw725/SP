@@ -53,7 +53,7 @@ def main(progress_callback=None, stop_flag=None):
     parser = argparse.ArgumentParser(description="PA: Paragraph Aligner")
     parser.add_argument("input_file", help="입력 파일 (Excel) - 컬럼: 원문, 번역문")
     parser.add_argument("output_file", help="출력 파일 (Excel) - 컬럼: 문단식별자, 원문, 번역문")
-    parser.add_argument("--embedder", default="bge", choices=["bge", "st", "openai"])
+    parser.add_argument("--embedder", default="bge", choices=["bge", "openai"])
     parser.add_argument("--threshold", type=float, default=0.3, help="유사도 임계값")
     parser.add_argument("--max-length", type=int, default=150, help="최대 문장 길이")
     parser.add_argument("--parallel", action="store_true", help="병렬 처리 (미구현)")  # ✅ 추가

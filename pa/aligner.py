@@ -10,25 +10,17 @@ from sentence_splitter import split_target_sentences_advanced, split_source_with
 
 # ✅ SA 임베더 직접 import
 def get_embedder_function(embedder_name: str, device: str = "cpu", openai_model: str = None, openai_api_key: str = None):
-    """SA 임베더 함수 직접 로드 (GPU 지원)"""
+    """SA 임베더 함수 직접 로드 (GPU 지원) - openai, bge만 지원"""
     if embedder_name == 'bge':
         from sa_embedders.bge import compute_embeddings_with_cache
         def embed_func(texts):
             return compute_embeddings_with_cache(texts)
         return embed_func
-    elif embedder_name == 'st':
-        try:
-            from sa_embedders.sentence_transformer import compute_embeddings_with_cache
-            def embed_func(texts):
-                return compute_embeddings_with_cache(texts, device=device)
-            return embed_func
-        except ImportError:
-            print("❌ SentenceTransformer 임베더 import 실패")
-            return fallback_embedder_bge(device)
     elif embedder_name == 'openai':
         try:
-            from sa_embedders.openai import compute_embeddings_with_cache
-            import os
+            import importlib
+            sa_openai = importlib.import_module('sa_embedders.openai')
+            compute_embeddings_with_cache = sa_openai.compute_embeddings_with_cache
             if openai_api_key:
                 os.environ["OPENAI_API_KEY"] = openai_api_key
             def embed_func(texts):
@@ -45,7 +37,8 @@ def get_embedder_function(embedder_name: str, device: str = "cpu", openai_model:
         except ImportError:
             print("❌ OpenAI 임베더 import 실패")
             return fallback_embedder_bge(device)
-    return fallback_embedder_bge(device)
+    else:
+        raise ValueError(f"지원하지 않는 임베더: {embedder_name}. 지원: openai, bge")
 
 def fallback_embedder_bge(device: str = "cpu"):
     """BGE-m3 SentenceTransformer 기반 fallback"""
@@ -163,6 +156,9 @@ def advanced_align_paragraphs(
     if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
         print(f"❌ 임베딩 차원 불일치: tgt={tgt_embeddings.shape}, src={src_embeddings.shape}")
         return []
+
+    # ✅ 유사도 행렬 계산
+    sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
 
     # ✅ DP 스타일 정렬 (순서 보존 + 무결성 보장)
     alignments = []

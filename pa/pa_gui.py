@@ -159,7 +159,7 @@ tk.Button(root, text="찾기", command=lambda: output_entry.insert(0, filedialog
 
 tk.Label(root, text="임베더:").grid(row=2, column=0)
 embedder_var = tk.StringVar(value="bge")
-embedder_menu = tk.OptionMenu(root, embedder_var, "bge", "st", "openai")
+embedder_menu = tk.OptionMenu(root, embedder_var, "bge", "openai")
 embedder_menu.grid(row=2, column=1)
 
 tk.Label(root, text="유사도 임계값:").grid(row=3, column=0)
