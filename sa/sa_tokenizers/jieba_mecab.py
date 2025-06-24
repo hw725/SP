@@ -17,8 +17,8 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.4
 
 # jieba와 MeCab 초기화
 try:
-    tagger = MeCab.Tagger('-d c:/Users/junto/AppData/Local/Programs/Python/Python310/Lib/site-packages/mecab-ko-dic')
-    logger.info("✅ MeCab 초기화 성공")
+    tagger = MeCab.Tagger('-d c:/Users/junto/AppData/Local/Programs/Python/Python310/Lib/site-packages/mecab-ko-dic -u C:/Users/junto/Downloads/head-repo/CSP/sa/venv/Scripts/user.dic')
+    logger.info("✅ MeCab 초기화 성공") # -d는 기본 사전, -u는 사용자 사전 경로
 except Exception as e:
     logger.warning(f"⚠️ MeCab 초기화 실패: {e}")
     mecab = None

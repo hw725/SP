@@ -61,9 +61,20 @@ pip install -r requirements.txt
 - **Linux/WSL**: mecab-ko, mecab-ko-dic, mecab-python3 모두 설치 권장
 - **GPU 사용**: torch/torchvision/torchaudio는 CUDA 버전에 맞게 설치 필요
 
-### 3. mecab 사용자 사전/한자어 지원 (예정)
+### 3. mecab 사용자 사전/한자어 지원
 - 표준국어대사전 기반 한자어 mecab 사용자사전 자동 생성/적용 기능은 추후 릴리즈 예정
-- 현재는 기본 mecab-ko-dic만 사용
+- **stuser.dic은 표준국어대사전에서 한자어만 추출하여 만든 mecab 사용자 사전입니다.**
+- **직접 생성한 사용자 사전(stuser.dic) 적용 방법:**
+    1. 사용자 사전 csv를 mecab-dict-index로 컴파일하여 stuser.dic 생성
+    2. Python 코드에서 아래와 같이 -u 옵션으로 경로를 지정
+        ```python
+        tagger = MeCab.Tagger('-d <mecab-ko-dic 경로> -u <stuser.dic 경로>')
+        # 예시:
+        # tagger = MeCab.Tagger('-d c:/.../mecab-ko-dic -u c:/.../stuser.dic')
+        ```
+    3. 여러 사용자 사전을 함께 쓰고 싶으면 csv를 미리 병합하여 하나의 dic로 컴파일
+    4. stuser.dic을 mecab-ko-dic 폴더에 복사하면 -u stuser.dic처럼 파일명만 지정해도 됨
+- 현재는 기본 mecab-ko-dic 또는 직접 생성한 사용자 사전만 사용 가능
 
 ### 4. spaCy 모델 설치 (최초 1회)
 ```bash
