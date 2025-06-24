@@ -11,15 +11,11 @@ dependencies:
   - openpyxl
   - regex
   - torch
-  - sentence-transformers
-  - scikit-learn
   - pip:
       - jieba
-      - soynlp
       - FlagEmbedding
       - openai
       - mecab-python3
-      - konlpy
       # mecab-ko, mecab-ko-dic은 리눅스/WSL에서 시스템 패키지로 설치 권장
       # sudo apt install mecab mecab-ko mecab-ko-dic
       # stanza (옵션)

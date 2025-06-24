@@ -13,10 +13,7 @@ dependencies:
   - regex>=2022.0.0
   - spacy>=3.4.0
   - torch>=1.9.0
-  - sentence-transformers>=2.2.0
-  - transformers>=4.21.0
   - pip:
-      - soynlp
       - FlagEmbedding>=1.0.0
       - jieba
       - openai>=1.0.0
@@ -27,4 +24,3 @@ dependencies:
       # spaCy 모델은 수동 설치 필요
       # python -m spacy download ko_core_news_lg
       # python -m spacy download zh_core_web_lg
-      # stanza>=1.6.0 (옵션)

@@ -6,11 +6,12 @@
 
 ## 주요 특징
 
-- **SA**: 문장/구 단위 정렬 (원문: jieba, 번역문: mecab/soy/kkma 등 선택)
+- **SA**: 문장/구 단위 정렬 (원문: jieba, 번역문: mecab)
 - **PA**: 문단→문장 분할 및 정렬 (spaCy 기반)
-- 다양한 임베더: SentenceTransformer, BGE-M3, OpenAI(모델/키 직접 선택)
-- 실시간 진행률, 캐시, 상세 로그 지원
-- CLI 환경에서 대용량/고품질 정렬에 최적화
+- 지원 임베더: BGE-M3, OpenAI(모델/키 직접 선택)
+- 실시간 진행률(터미널 tqdm/GUI progress bar), 캐시, 상세 로그 지원
+- CLI/GUI 환경에서 대용량/고품질 정렬에 최적화
+- **경량화**: 성능이 우수한 임베더(BGE, OpenAI)와 토크나이저(jieba, mecab)만 남기고 경량화.
 
 ---
 
@@ -82,12 +83,13 @@ python pa/main.py ...
 
 - 입력/출력은 Excel(xlsx) 파일만 지원
 - OpenAI 임베더 사용 시 모델명/키를 CLI 옵션으로 직접 입력
-- 진행률/에러/로그는 CLI에 실시간 출력
+- **진행률/에러/로그는 CLI(터미널 tqdm) 및 GUI(진행률 바) 모두 실시간 표시**
 
 ---
 
-## 실행파일/GUI 안내 (예정)
-- pa_gui.exe, sa_gui.exe 등 GUI/실행파일 버전은 추후 별도 릴리즈 예정
+## 실행파일/GUI 안내
+- pa_gui.exe, sa_gui.exe 등 GUI/실행파일 버전도 제공 (sa_gui.py 직접 실행 가능)
+- GUI에서는 진행률 바(progress bar)로 실시간 진행 상황 확인 가능
 - 최신 실행파일 및 한자어 mecab 사용자사전 지원은 [Releases](https://github.com/hw725/CSP/releases)에서 추후 확인
 
 ---
