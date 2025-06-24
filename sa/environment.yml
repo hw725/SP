@@ -1,0 +1,27 @@
+name: csp-sa
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10.11
+  - pip
+  - pandas
+  - numpy
+  - tqdm
+  - openpyxl
+  - regex
+  - torch
+  - sentence-transformers
+  - scikit-learn
+  - pip:
+      - jieba
+      - soynlp
+      - FlagEmbedding
+      - openai
+      - mecab-python3
+      - konlpy
+      # mecab-ko, mecab-ko-dic은 리눅스/WSL에서 시스템 패키지로 설치 권장
+      # sudo apt install mecab mecab-ko mecab-ko-dic
+      # stanza (옵션)
+      # python -m spacy download ko_core_news_lg
+      # python -m spacy download zh_core_web_lg
