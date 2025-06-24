@@ -108,11 +108,11 @@ tk.Label(root, text="jieba (고정)").grid(row=2, column=1)
 
 tk.Label(root, text="번역문 토크나이저:").grid(row=3, column=0)
 tgt_tokenizer_var = tk.StringVar(value="mecab")
-tk.OptionMenu(root, tgt_tokenizer_var, "mecab", "soy", "kkma").grid(row=3, column=1)
+tk.OptionMenu(root, tgt_tokenizer_var, "mecab").grid(row=3, column=1)
 
 tk.Label(root, text="임베더:").grid(row=4, column=0)
-embedder_var = tk.StringVar(value="st")
-tk.OptionMenu(root, embedder_var, "st", "bge", "openai", "hf").grid(row=4, column=1)
+embedder_var = tk.StringVar(value="bge")
+tk.OptionMenu(root, embedder_var, "bge", "openai").grid(row=4, column=1)
 
 tk.Label(root, text="최소 토큰 수:").grid(row=5, column=0)
 min_tokens_var = tk.IntVar(value=1)

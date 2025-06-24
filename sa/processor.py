@@ -6,8 +6,8 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from tqdm import tqdm  # 진행률 표시 추가
 from io_utils import load_excel_file as load_excel, save_alignment_results as save_excel
-from sa_tokenizers import split_src_meaning_units, split_tgt_meaning_units
-from sa_embedders import compute_embeddings_with_cache
+from sa_tokenizers import split_src_meaning_units, split_tgt_meaning_units  # jieba, mecab만 사용
+from sa_embedders import compute_embeddings_with_cache  # openai, bge만 지원
 from aligner import align_tokens_with_embeddings as align_tokens
 import time
 
@@ -105,35 +105,41 @@ def process_file(
         results = []
         
         # 🎯 메인 진행률 바 추가
-        progress_bar = tqdm(
-            df.iterrows(), 
-            total=total_sentences,
-            desc="🔤 문장 처리",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
-            ncols=100
-        )
+        use_callback = progress_callback is not None
+        if not use_callback:
+            progress_bar = tqdm(
+                df.iterrows(), 
+                total=total_sentences,
+                desc="🔤 문장 처리",
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
+                ncols=100
+            )
         
         start_time = time.time()  # 시작 시간 기록
         
-        for idx, row in progress_bar:
+        for idx, row in (progress_bar if not use_callback else enumerate(df.iterrows())):
             # 중지 플래그 체크
             if stop_flag and stop_flag.is_set():
                 logger.info("⏹️ 사용자 중지 요청, 처리 중단")
                 break
 
             # 진행률 바 설명 업데이트
-            progress_bar.set_description(f"🔤 문장 {idx+1}/{total_sentences}")
+            if not use_callback:
+                progress_bar.set_description(f"🔤 문장 {idx+1}/{total_sentences}")
+            else:
+                progress_callback(idx+1, total_sentences)
             
             try:
-                src_text = row.get('src', '')
-                tgt_text = row.get('tgt', '')
+                src_text = row.get('src', '') if not use_callback else row[1].get('src', '')
+                tgt_text = row.get('tgt', '') if not use_callback else row[1].get('tgt', '')
                 
                 if not src_text or not tgt_text:
                     logger.warning(f"⚠️ 문장 {idx+1}: 빈 텍스트 - 건너뜀")
                     continue
                 
                 # 1. 원문 토크나이징
-                progress_bar.set_postfix_str("원문 토크나이징...")
+                if not use_callback:
+                    progress_bar.set_postfix_str("원문 토크나이징...")
                 src_units = split_src_meaning_units(
                     src_text, 
                     min_tokens=min_tokens, 
@@ -141,7 +147,8 @@ def process_file(
                 )
                 
                 # 2. 번역문 토크나이징  
-                progress_bar.set_postfix_str("번역문 토크나이징...")
+                if not use_callback:
+                    progress_bar.set_postfix_str("번역문 토크나이징...")
                 tgt_units = split_tgt_meaning_units(
                     src_text,
                     tgt_text,
@@ -152,7 +159,8 @@ def process_file(
                 )
                 
                 # 3. 정렬
-                progress_bar.set_postfix_str("토큰 정렬...")
+                if not use_callback:
+                    progress_bar.set_postfix_str("토큰 정렬...")
                 alignments = align_tokens(
                     src_units,
                     tgt_units,
@@ -164,12 +172,13 @@ def process_file(
                 )
                 
                 # 4. 괄호 처리
-                progress_bar.set_postfix_str("괄호 처리...")
+                if not use_callback:
+                    progress_bar.set_postfix_str("괄호 처리...")
                 alignments = process_punctuation(alignments, src_units, tgt_units)
                 
                 # 결과 저장
                 row_result = {
-                    'id': row.get('id', idx+1),
+                    'id': row.get('id', idx+1) if not use_callback else row[1].get('id', idx+1),
                     'src': src_text,
                     'tgt': tgt_text,
                     'src_units': src_units,
@@ -188,17 +197,18 @@ def process_file(
                     logger.info(f"✅ {idx+1}/{total_sentences} 문장 처리 완료")
                 
                 # 진행률 바 상태 업데이트
-                success_count = len(results)
-                progress_bar.set_postfix_str(f"성공: {success_count}")
+                if not use_callback:
+                    success_count = len(results)
+                    progress_bar.set_postfix_str(f"성공: {success_count}")
                 
             except Exception as e:
                 logger.error(f"❌ 문장 {idx+1} 처리 실패: {e}")
                 
                 # 실패한 경우도 결과에 추가
                 row_result = {
-                    'id': row.get('id', idx+1),
-                    'src': row.get('src', ''),
-                    'tgt': row.get('tgt', ''),
+                    'id': row.get('id', idx+1) if not use_callback else row[1].get('id', idx+1),
+                    'src': row.get('src', '') if not use_callback else row[1].get('src', ''),
+                    'tgt': row.get('tgt', '') if not use_callback else row[1].get('tgt', ''),
                     'src_units': [],
                     'tgt_units': [],
                     'alignments': [],
@@ -209,10 +219,11 @@ def process_file(
                 }
                 results.append(row_result)
                 
-                progress_bar.set_postfix_str(f"실패: {str(e)[:20]}...")
-        
+                if not use_callback:
+                    progress_bar.set_postfix_str(f"실패: {str(e)[:20]}...")
         # 진행률 바 완료
-        progress_bar.close()
+        if not use_callback:
+            progress_bar.close()
         
         end_time = time.time()  # 종료 시간 기록
         

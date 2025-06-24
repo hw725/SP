@@ -20,17 +20,17 @@ def init_worker():
         print(f"워커 {mp.current_process().pid}: 초기화 시작")
         
         # 임베더 초기화
-        from sa.embedders.embedder import get_embed_func
+        from sa_embedders import get_embed_func
         worker_embed_func = get_embed_func()
         
         # 필요한 모듈들 임포트
-        from tokenizer import split_src_meaning_units, split_tgt_by_src_units_semantic
+        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units
         from aligner import align_src_tgt
         from punctuation import mask_brackets, restore_brackets
         
         worker_modules = {
             'split_src_meaning_units': split_src_meaning_units,
-            'split_tgt_by_src_units_semantic': split_tgt_by_src_units_semantic,
+            'split_tgt_meaning_units': split_tgt_meaning_units,
             'align_src_tgt': align_src_tgt,
             'mask_brackets': mask_brackets,
             'restore_brackets': restore_brackets

@@ -20,47 +20,37 @@ def setup_logging(verbose: bool = False):
     )
 
 def get_tokenizer_module(tokenizer_name: str):
-    """토크나이저 모듈 동적 로드"""
+    """토크나이저 모듈 동적 로드 - jieba(원문), mecab(번역문)만 지원"""
     tokenizer_map = {
         'jieba': 'sa_tokenizers.jieba_mecab',
-        'mecab': 'sa_tokenizers.jieba_mecab', 
-        'soy': 'sa_tokenizers.soynlp',
-        'kkma': 'sa_tokenizers.kkma'
+        'mecab': 'sa_tokenizers.jieba_mecab',
     }
-    
     if tokenizer_name not in tokenizer_map:
-        raise ValueError(f"지원하지 않는 토크나이저: {tokenizer_name}")
-    
+        raise ValueError(f"지원하지 않는 토크나이저: {tokenizer_name}. 지원: jieba(원문), mecab(번역문)")
     module_name = tokenizer_map[tokenizer_name]
-    
     try:
         import importlib
-        module = importlib.import_module(module_name)
-        return module
+        return importlib.import_module(module_name)
     except ImportError as e:
-        raise ImportError(f"토크나이저 모듈 로드 실패 {tokenizer_name}: {e}")
+        raise ImportError(f"토크나이저 모듈 로드 실패: {module_name} ({e})")
 
 def get_embedder_module(embedder_name: str):
     """임베더 모듈 동적 로드"""
     embedder_map = {
-        'sentence_transformer': 'sa_embedders.sentence_transformer',
-        'st': 'sa_embedders.sentence_transformer',
         'openai': 'sa_embedders.openai',
         'bge': 'sa_embedders.bge',
-        'hf': 'sa_embedders.hf'
     }
     
     if embedder_name not in embedder_map:
-        raise ValueError(f"지원하지 않는 임베더: {embedder_name}")
+        raise ValueError(f"지원하지 않는 임베더: {embedder_name}. 지원: openai, bge")
     
     module_name = embedder_map[embedder_name]
     
     try:
         import importlib
-        module = importlib.import_module(module_name)
-        return module
+        return importlib.import_module(module_name)
     except ImportError as e:
-        raise ImportError(f"임베더 모듈 로드 실패 {embedder_name}: {e}")
+        raise ImportError(f"임베더 모듈 로드 실패: {module_name} ({e})")
 
 def process_single_file(
     input_file: str,
@@ -179,7 +169,7 @@ def main(progress_callback=None, stop_flag=None):
   python main.py input.xlsx output.xlsx --tokenizer jieba --embedder bge --min-tokens 2 --max-tokens 15 --no-semantic
   
 지원 토크나이저: jieba, soy, kkma
-지원 임베더: st, openai, bge, hf
+지원 임베더: openai, bge
         """
     )
     
@@ -189,11 +179,11 @@ def main(progress_callback=None, stop_flag=None):
     
     # 선택 인자
     parser.add_argument('--tokenizer', '-t', default='jieba', 
-                       choices=['jieba', 'mecab', 'soy', 'kkma'],
-                       help='토크나이저 선택 (기본: jieba)')
+                       choices=['jieba', 'mecab'],
+                       help='토크나이저 선택 (jieba: 원문, mecab: 번역문, 기본: jieba)')
     
     parser.add_argument('--embedder', '-e', default='st',
-                       choices=['st', 'sentence_transformer', 'openai', 'bge', 'hf'], 
+                       choices=['openai', 'bge'], 
                        help='임베더 선택 (기본: st)')
     
     parser.add_argument('--parallel', '-p', action='store_true',
