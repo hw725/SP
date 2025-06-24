@@ -62,9 +62,8 @@ pip install -r requirements.txt
 - **GPU 사용**: torch/torchvision/torchaudio는 CUDA 버전에 맞게 설치 필요
 
 ### 3. mecab 사용자 사전/한자어 지원
-- 표준국어대사전 기반 한자어 mecab 사용자사전 자동 생성/적용 기능은 추후 릴리즈 예정
-- **stuser.dic은 표준국어대사전에서 한자어만 추출하여 만든 mecab 사용자 사전입니다.**
-- **직접 생성한 사용자 사전(stuser.dic) 적용 방법:**
+- **stuser.dic은 표준국어대사전에서 한자어만 추출하여 만든 mecab 사용자 사전이며, 이번 업데이트에 함께 제공합니다.**
+- **사용자 사전(stuser.dic) 적용 방법:**
     1. 사용자 사전 csv를 mecab-dict-index로 컴파일하여 stuser.dic 생성
     2. Python 코드에서 아래와 같이 -u 옵션으로 경로를 지정
         ```python
@@ -99,7 +98,8 @@ python pa/main.py ...
 ---
 
 ## 실행파일/GUI 안내
-- pa_gui.exe, sa_gui.exe 등 GUI/실행파일 버전도 제공 (sa_gui.py 직접 실행 가능)
+- sa_gui.py, pa_gui.py 등 GUI는 직접 실행 가능
+- **실행파일(.exe)은 추후 릴리즈 예정**
 - GUI에서는 진행률 바(progress bar)로 실시간 진행 상황 확인 가능
 - 최신 실행파일 및 한자어 mecab 사용자사전 지원은 [Releases](https://github.com/hw725/CSP/releases)에서 추후 확인
 
