@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # OpenAI 클라이언트 초기화
 try:
     import openai
-    logger.info("✅ OpenAI 라이브러리 로드 성공")
+    logger.debug("✅ OpenAI 라이브러리 로드 성공")
 except ImportError:
     logger.error("❌ OpenAI 라이브러리가 설치되지 않았습니다. pip install openai")
     openai = None

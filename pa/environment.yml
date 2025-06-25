@@ -18,6 +18,8 @@ dependencies:
       - jieba
       - openai>=1.0.0
       - mecab-python3>=1.0.0
+      - transformers
+      - sentence-transformers
       # 아래는 수동 설치 안내
       # - mecab-ko>=1.0.0
       # - mecab-ko-dic>=1.0.0

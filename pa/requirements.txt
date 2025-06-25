@@ -15,6 +15,10 @@ jieba
 openai>=1.0.0
 mecab-python3>=1.0.0
 
+# transformers와 sentence-transformers 추가
+transformers
+sentence-transformers
+
 # spaCy 모델들 (수동 설치)
 # python -m spacy download ko_core_news_lg
 # python -m spacy download zh_core_web_lg

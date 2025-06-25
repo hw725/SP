@@ -29,16 +29,16 @@ def process_sentence(
     **kwargs
 ) -> Dict[str, Any]:
     """단일 문장 처리"""
-    
+    print("[DEBUG] process_sentence 진입")
     try:
-        # 1. 토크나이징
+        print("[DEBUG] 1. 토크나이징 시작")
         src_units = split_src_meaning_units(
             src_text, 
             min_tokens=min_tokens, 
             max_tokens=max_tokens,
             use_advanced=True
         )
-        
+        print(f"[DEBUG] src_units: {src_units}")
         tgt_units = split_tgt_meaning_units(
             src_text,
             tgt_text,
@@ -47,25 +47,27 @@ def process_sentence(
             max_tokens=max_tokens,
             embed_func=compute_embeddings_with_cache if use_semantic else None
         )
-        
-        # 2. 정렬
+        print(f"[DEBUG] tgt_units: {tgt_units}")
+        print("[DEBUG] 2. 정렬 시작")
         alignments = align_tokens(
             src_units, 
             tgt_units,
             embed_func=compute_embeddings_with_cache
         )
-        
-        # 3. 괄호 처리
+        print(f"[DEBUG] alignments: {alignments}")
+        print("[DEBUG] 3. 괄호 처리 시작")
         processed_alignments = process_punctuation(alignments, src_units, tgt_units)
-        
+        print(f"[DEBUG] processed_alignments: {processed_alignments}")
         return {
             'src_units': src_units,
             'tgt_units': tgt_units,
             'alignments': processed_alignments,
             'status': 'success'
         }
-        
     except Exception as e:
+        import traceback
+        print("[ERROR] process_sentence 예외 발생:", e)
+        traceback.print_exc()
         logger.error(f"❌ 문장 처리 실패: {e}")
         return {
             'src_units': [],
@@ -132,23 +134,20 @@ def process_file(
             try:
                 src_text = row.get('src', '') if not use_callback else row[1].get('src', '')
                 tgt_text = row.get('tgt', '') if not use_callback else row[1].get('tgt', '')
-                
-                if not src_text or not tgt_text:
-                    logger.warning(f"⚠️ 문장 {idx+1}: 빈 텍스트 - 건너뜀")
-                    continue
-                
-                # 1. 원문 토크나이징
-                if not use_callback:
-                    progress_bar.set_postfix_str("원문 토크나이징...")
+                print(f"\n[REALTIME] 문장 {idx+1}/{total_sentences}")
+                print(f"[REALTIME] src: {src_text}")
+                print(f"[REALTIME] tgt: {tgt_text}")
+
+                print("[DEBUG] split_src_meaning_units 진입")
                 src_units = split_src_meaning_units(
                     src_text, 
                     min_tokens=min_tokens, 
                     max_tokens=max_tokens
                 )
-                
-                # 2. 번역문 토크나이징  
-                if not use_callback:
-                    progress_bar.set_postfix_str("번역문 토크나이징...")
+                print("[DEBUG] split_src_meaning_units 종료")
+                print(f"[REALTIME] src_units: {src_units}")
+
+                print("[DEBUG] split_tgt_meaning_units 진입")
                 tgt_units = split_tgt_meaning_units(
                     src_text,
                     tgt_text,
@@ -157,10 +156,42 @@ def process_file(
                     max_tokens=max_tokens,
                     embed_func=compute_embeddings_with_cache if use_semantic else None
                 )
-                
+                print("[DEBUG] split_tgt_meaning_units 종료")
+                print(f"[REALTIME] tgt_units: {tgt_units}")
+
+                # 41번째 문장 src/tgt 별도 저장
+                if idx+1 == 41:
+                    with open('debug_41_src.txt', 'w', encoding='utf-8') as f:
+                        f.write(src_text)
+                    with open('debug_41_tgt.txt', 'w', encoding='utf-8') as f:
+                        f.write(tgt_text)
+                if not src_text or not tgt_text:
+                    logger.warning(f"⚠️ 문장 {idx+1}: 빈 텍스트 - 건너뜀")
+                    continue
+                # 1. 원문 토크나이징
+                print(f"[DEBUG] split_src_meaning_units 진입 (문장 {idx+1})")
+                t0 = time.time()
+                src_units = split_src_meaning_units(
+                    src_text, 
+                    min_tokens=min_tokens, 
+                    max_tokens=max_tokens
+                )
+                print(f"[DEBUG] split_src_meaning_units 반환 (문장 {idx+1}, {len(src_units)}개, {time.time()-t0:.2f}s): {src_units}")
+                # 2. 번역문 토크나이징  
+                print(f"[DEBUG] split_tgt_meaning_units 진입 (문장 {idx+1})")
+                t0 = time.time()
+                tgt_units = split_tgt_meaning_units(
+                    src_text,
+                    tgt_text,
+                    use_semantic=use_semantic,
+                    min_tokens=min_tokens,
+                    max_tokens=max_tokens,
+                    embed_func=compute_embeddings_with_cache if use_semantic else None
+                )
+                print(f"[DEBUG] split_tgt_meaning_units 반환 (문장 {idx+1}, {len(tgt_units)}개, {time.time()-t0:.2f}s): {tgt_units}")
                 # 3. 정렬
-                if not use_callback:
-                    progress_bar.set_postfix_str("토큰 정렬...")
+                print(f"[DEBUG] align_tokens 진입 (문장 {idx+1})")
+                t0 = time.time()
                 alignments = align_tokens(
                     src_units,
                     tgt_units,
@@ -170,12 +201,12 @@ def process_file(
                         api_key=openai_api_key
                     ) if use_semantic else None
                 )
-                
+                print(f"[DEBUG] align_tokens 반환 (문장 {idx+1}, {len(alignments) if alignments else 0}개, {time.time()-t0:.2f}s): {alignments}")
                 # 4. 괄호 처리
-                if not use_callback:
-                    progress_bar.set_postfix_str("괄호 처리...")
+                print(f"[DEBUG] process_punctuation 진입 (문장 {idx+1})")
+                t0 = time.time()
                 alignments = process_punctuation(alignments, src_units, tgt_units)
-                
+                print(f"[DEBUG] process_punctuation 반환 (문장 {idx+1}, {len(alignments) if alignments else 0}개, {time.time()-t0:.2f}s): {alignments}")
                 # 결과 저장
                 row_result = {
                     'id': row.get('id', idx+1) if not use_callback else row[1].get('id', idx+1),

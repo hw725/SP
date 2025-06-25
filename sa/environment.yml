@@ -21,3 +21,5 @@ dependencies:
       # stanza (옵션)
       # python -m spacy download ko_core_news_lg
       # python -m spacy download zh_core_web_lg
+      - transformers
+      - sentence-transformers

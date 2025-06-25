@@ -56,15 +56,15 @@ def process_single_file(
     input_file: str,
     output_file: str,
     tokenizer_name: str = 'jieba',
-    embedder_name: str = 'st',
+    embedder_name: str = 'bge',  # 기본값을 bge로 변경
     use_semantic: bool = True,
     min_tokens: int = 1,
     max_tokens: int = 10,
     parallel: bool = False,
-    openai_model: str = "text-embedding-3-large",      # 추가
-    openai_api_key: str = None,                        # 추가
-    progress_callback=None,                            # 추가
-    stop_flag=None,                                    # 추가
+    openai_model: str = "text-embedding-3-large",
+    openai_api_key: str = None,
+    progress_callback=None,
+    stop_flag=None,
     **kwargs
 ) -> bool:
     """단일 파일 처리"""
@@ -81,42 +81,20 @@ def process_single_file(
     print(f"   토큰 범위: {min_tokens}-{max_tokens}")
 
     try:
-        # 🔧 수정: 기본 토크나이저는 동적 로딩 없이 바로 처리
-        if tokenizer_name == 'jieba' and embedder_name == 'st':
-            print("✅ 기본 모듈 사용 (jieba + sentence_transformer)")
-
-            from processor import process_file
-
-            results = process_file(
-                input_file,
-                use_semantic=use_semantic,
-                min_tokens=min_tokens,
-                max_tokens=max_tokens,
-                save_results=True,
-                output_file=output_file,
-                openai_model=openai_model,             # 추가
-                openai_api_key=openai_api_key          # 추가
-            )
-
-        else:
-            print("✅ 동적 모듈 로딩...")
-
-            # 동적 모듈 로드
-            tokenizer_module = get_tokenizer_module(tokenizer_name)
-            embedder_module = get_embedder_module(embedder_name)
-
-            print(f"✅ 모듈 로드 완료")
-
-            from processor import process_file_with_modules
-
-            results = process_file_with_modules(
-                input_file, output_file,
-                tokenizer_module, embedder_module,
-                embedder_name,  # 추가!
-                use_semantic, min_tokens, max_tokens,
-                openai_model=openai_model,
-                openai_api_key=openai_api_key
-            )
+        # 항상 동적 모듈 로딩 경로 사용
+        print("✅ 동적 모듈 로딩...")
+        tokenizer_module = get_tokenizer_module(tokenizer_name)
+        embedder_module = get_embedder_module(embedder_name)
+        print(f"✅ 모듈 로드 완료")
+        from processor import process_file_with_modules
+        results = process_file_with_modules(
+            input_file, output_file,
+            tokenizer_module, embedder_module,
+            embedder_name,  # 추가!
+            use_semantic, min_tokens, max_tokens,
+            openai_model=openai_model,
+            openai_api_key=openai_api_key
+        )
 
         end_time = time.time()  # ⏱️ 처리 종료 시간 기록
 
@@ -182,9 +160,9 @@ def main(progress_callback=None, stop_flag=None):
                        choices=['jieba', 'mecab'],
                        help='토크나이저 선택 (jieba: 원문, mecab: 번역문, 기본: jieba)')
     
-    parser.add_argument('--embedder', '-e', default='st',
+    parser.add_argument('--embedder', '-e', default='bge',
                        choices=['openai', 'bge'], 
-                       help='임베더 선택 (기본: st)')
+                       help='임베더 선택 (기본: bge)')
     
     parser.add_argument('--parallel', '-p', action='store_true',
                        help='병렬 처리 활성화')

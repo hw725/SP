@@ -147,7 +147,10 @@ _embedding_manager = EmbeddingManager(fallback_to_dummy=True)
 
 def compute_embeddings_with_cache(texts: List[str], **kwargs) -> np.ndarray:
     """하위 호환성 함수"""
-    return _embedding_manager.compute_embeddings_with_cache(texts, **kwargs)
+    # model 등 불필요한 인자는 무시하고, 필요한 인자만 전달
+    allowed_keys = {'batch_size', 'show_batch_progress'}
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in allowed_keys}
+    return _embedding_manager.compute_embeddings_with_cache(texts, **filtered_kwargs)
 
 def get_embed_func() -> Callable:
     """임베딩 함수 반환"""

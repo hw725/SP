@@ -2,6 +2,7 @@
 
 import logging
 import regex  # 🆕 유니코드 속성 정규식
+import re  # 괄호 추출 및 패턴 컴파일용
 from typing import List, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
@@ -87,16 +88,31 @@ def restore_brackets(text: str, masks: List[str]) -> str:
     return text
 
 def extract_punctuation_with_han(text: str) -> Tuple[List[str], List[int]]:
-    """한자 고려한 구두점 추출"""
-    
-    # 🆕 한자/한글 구두점 패턴
-    pattern = r'([\p{Han}\p{Hangul}]*[.!?。！？,，;：:]+[\p{Han}\p{Hangul}]*)'
-    
-    matches = list(regex.finditer(pattern, text))
-    punctuations = [match.group() for match in matches]
-    positions = [match.start() for match in matches]
-    
-    return punctuations, positions
+    """한자/한글 구두점 경계 추출 (전각 콜론 등 경계 강화, 기존 기능 보존)"""
+    # 1. 반각 종결부호+공백 기준 분할(따옴표 문제 방지)
+    # 2. 전각 콜론(：)은 공백 없이도 경계로 처리
+    import regex
+    result = []
+    positions = []
+    # 1단계: 반각 종결부호+공백 기준 분할
+    pattern1 = r'([.!?])\s+'
+    parts = regex.split(pattern1, text)
+    temp = []
+    for i in range(0, len(parts)-1, 2):
+        temp.append(parts[i] + parts[i+1])
+    if len(parts) % 2 == 1 and parts[-1]:
+        temp.append(parts[-1])
+    # 2단계: 각 파트에서 전각 콜론(：) 기준 추가 분할
+    for part in temp:
+        subparts = regex.split(r'(：)', part)
+        for i in range(0, len(subparts)-1, 2):
+            seg = subparts[i] + subparts[i+1]
+            result.append(seg)
+            positions.append(text.find(seg))
+        if len(subparts) % 2 == 1 and subparts[-1]:
+            result.append(subparts[-1])
+            positions.append(text.find(subparts[-1]))
+    return result, positions
 
 def is_han_punctuation(char: str) -> bool:
     """한자 구두점 여부"""
