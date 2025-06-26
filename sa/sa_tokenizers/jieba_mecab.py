@@ -7,6 +7,7 @@ import re
 from typing import List, Callable
 import jieba
 import MeCab
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,12 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.4
 
 # jieba와 MeCab 초기화
 try:
+    # 사용자 사전 경로를 설치 경로 기준으로 동적으로 지정
+    user_dic_path = os.path.join(os.path.dirname(__file__), "stuser.dic")
     tagger = MeCab.Tagger(
         '-r C:/Users/junto/Downloads/head-repo/CSP/pa/venv/Lib/site-packages/mecab_ko_dic/dicdir/mecabrc '
         '-d C:/Users/junto/Downloads/head-repo/CSP/pa/venv/Lib/site-packages/mecab_ko_dic/dicdir '
-        '-u C:/Users/junto/Downloads/head-repo/CSP/sa/venv/Scripts/user.dic'
+        f'-u {user_dic_path}'
     )
     logger.info("✅ MeCab 초기화 성공") # -d는 기본 사전, -u는 사용자 사전 경로
 except Exception as e:
