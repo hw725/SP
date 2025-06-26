@@ -6,7 +6,7 @@ tqdm
 openpyxl
 torch
 torchvision
-torchaudio --index-url https://download.pytorch.org/whl/cu121
+torchaudio
 FlagEmbedding
 jieba
 # 🔧 이미 설치된 MeCab 패키지들 (그대로 유지)
