@@ -49,32 +49,25 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
    - Windows: mecab-python3가 반드시 필요 (requirements.txt에 포함)
    - Linux/WSL: mecab-ko, mecab-ko-dic, mecab-python3 모두 설치 권장
    - GPU 사용: torch/torchvision/torchaudio는 CUDA 버전에 맞게 설치 필요
-3. **mecab 사용자 사전/한자어 지원**
+3. **mecab 사용자 사전/한자어 지원 적용 방법**
    - stuser.dic은 표준국어대사전에서 한자어만 추출하여 만든 mecab 사용자 사전으로, 이번 업데이트에 함께 제공
-   - 사용자 사전(stuser.dic) 적용 방법:
-     - 사용자 사전 csv를 mecab-dict-index로 컴파일하여 stuser.dic 생성
-       - mecab-dict-index 실행 파일이 있는 경로(예: mecab 설치 폴더 또는 mecab-ko-dic/tools 등)로 이동한 후 명령어 실행
-       - 예시(Windows):
-         ```bash
-         cd <mecab-dict-index.exe 위치>
-         mecab-dict-index -d <mecab-ko-dic 경로> -u stuser.dic -f UTF-8 -t UTF-8 <stuser.csv 경로>
-         ```
-       - 예시(Linux/WSL):
-         ```bash
-         cd <mecab-dict-index 위치>
-         mecab-dict-index -d <mecab-ko-dic 경로> -u stuser.dic -f UTF-8 -t UTF-8 <stuser.csv 경로>
-         ```
-       - stuser.csv는 UTF-8 인코딩이어야 하며, mecab-ko-dic의 표준 csv 포맷을 따라야 함
-       - 생성된 stuser.dic을 mecab-ko-dic 폴더 또는 원하는 경로에 복사하여 사용
-     - Python 코드에서 아래와 같이 -u 옵션으로 경로를 지정
-       ```python
-       tagger = MeCab.Tagger('-d <mecab-ko-dic 경로> -u <stuser.dic 경로>')
-       # 예시:
-       # tagger = MeCab.Tagger('-d c:/.../mecab-ko-dic -u c:/.../stuser.dic')
-       ```
-     - 여러 사용자 사전을 함께 쓰고 싶으면 csv를 미리 병합하여 하나의 dic으로 컴파일
-     - stuser.dic을 mecab-ko-dic 폴더에 복사하면 -u stuser.dic처럼 파일명만 지정해도 됨
-     - 현재는 기본 mecab-ko-dic 또는 직접 생성한 사용자 사전만 사용 가능
+    1. 사용자 사전 csv(stuser.csv)를 mecab-dict-index로 컴파일하여 stuser.dic 생성
+        - mecab-dict-index 실행 파일이 있는 경로로 이동 후 아래 명령어 실행
+        - 예시(Windows/Linux/WSL):
+        ```bash
+        mecab-dict-index -d <mecab-ko-dic 경로> -u stuser.dic -f UTF-8 -t UTF-8 <stuser.csv 경로>
+        ```
+        - stuser.csv는 UTF-8 인코딩, mecab-ko-dic 표준 csv 포맷 필요
+        - 생성된 stuser.dic을 mecab-ko-dic 폴더 또는 원하는 경로에 복사
+    2. Python 코드에서 -u 옵션으로 경로 지정
+        ```python
+        tagger = MeCab.Tagger('-d <mecab-ko-dic 경로> -u <stuser.dic 경로>')
+        # 예시:
+        # tagger = MeCab.Tagger('-d c:/.../mecab-ko-dic -u c:/.../stuser.dic')
+        ```
+   - 여러 사용자 사전을 함께 쓰고 싶으면 csv를 미리 병합하여 하나의 dic으로 컴파일
+   - stuser.dic을 mecab-ko-dic 폴더에 복사하면 -u stuser.dic처럼 파일명만 지정해도 됨
+   - 현재는 기본 mecab-ko-dic 또는 직접 생성한 사용자 사전만 사용 가능
 4. **spaCy 모델 설치 (최초 1회)**
    ```bash
    python -m spacy download ko_core_news_lg
