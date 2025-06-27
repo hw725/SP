@@ -4,8 +4,7 @@
 
 ---
 
-## 특징
-
+## 주요 특징
 - 한문-한국어 번역문 문장/구/문단 단위 자동 정렬
 - 대용량 데이터, 고품질 임베딩(OpenAI, BGE 등) 지원
 - CLI/GUI 환경 지원, 실시간 진행률/로그 제공
@@ -14,15 +13,13 @@
 ---
 
 ## 설치 및 실행
-
 - install_wizard_gui.exe 실행 시 자동 설치
 - 인터넷 연결 필요
 - 설치 중 오류 발생 시 메시지 및 로그 파일 생성
 
 ---
 
-## CLI 예시
-
+## CLI 사용법
 ```bash
 # SA 예시 (문장/구 단위 정렬)
 python sa/main.py input.xlsx output.xlsx --tokenizer mecab --embedder bge --min-tokens 2 --max-tokens 10
@@ -33,7 +30,6 @@ python sa/main.py input.xlsx output.xlsx --embedder openai --openai-model text-e
 # PA 예시 (문단→문장 정렬)
 python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --threshold 0.35
 ```
-
 - 입력/출력: Excel(xlsx) 파일 지원
 - OpenAI 임베더 사용 시 모델명/키 CLI 옵션 입력 필요
 - 진행률/에러/로그: CLI(tqdm), GUI(진행률 바) 실시간 표시
@@ -41,7 +37,6 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 ---
 
 ## 샘플 데이터
-
 - pa/input.xlsx, sa/input01.xlsx, sa/input02.xlsx 등 샘플 입력 파일 포함
 - 작업 결과물(output.xlsx 등) 미포함
 - 샘플 입력 파일 형식: Excel(xlsx)
@@ -49,15 +44,12 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 ---
 
 ## PA(문단→문장 정렬) 샘플
-
 **입력 파일(Excel, xlsx):**
-
 | 문단(원문) | 문단(번역문) |
 |:-----------|:------------|
 | 子曰 學而時習之 不亦說乎. 有朋自遠方來 不亦樂乎. 人不知而不慍 不亦君子乎. | 공자께서 말씀하셨다. 배우고 때때로 익히면 또한 기쁘지 아니한가. 벗이 먼 곳에서 찾아오면 또한 즐겁지 아니한가. 남이 알아주지 않아도 성내지 않으면 또한 군자가 아니겠는가. |
 
 **출력 파일(Excel, xlsx):**
-
 | 문단ID | 문장ID | 원문(분할) | 번역문(분할) |
 |:-------|:-------|:-----------|:-------------|
 | 1 | 1 | 子曰 學而時習之 不亦說乎 | 공자께서 말씀하셨다. 배우고 때때로 익히면 또한 기쁘지 아니한가 |
@@ -67,9 +59,7 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 ---
 
 ## SA(문장/구 정렬) 샘플
-
 **입력 파일(Excel, xlsx):**
-
 | 원문(샘플) | 번역문(샘플) |
 |:-----------|:------------|
 | 子曰 學而時習之 不亦說乎 | 공자께서 말씀하셨다. 배우고 때때로 익히면 또한 기쁘지 아니한가 |
@@ -77,7 +67,6 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 | 人不知而不慍 不亦君子乎 | 남이 알아주지 않아도 성내지 않으면 또한 군자가 아니겠는가 |
 
 **출력 파일(Excel, xlsx, 예: output01_phrase.xlsx):**
-
 | 문장식별자 | 구식별자 | 원문구 | 번역구 |
 |:----------|:--------|:-------|:-------|
 | 1 | 1 | 子曰 | 공자께서 말씀하셨다 |
@@ -91,6 +80,4 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 ---
 
 ## 문제 해결
-
 - 오류 발생 시 메시지 및 로그 파일 생성
-- 추가 문의: 관리자 또는 배포처 문의
