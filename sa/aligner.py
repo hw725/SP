@@ -5,7 +5,7 @@ import re
 import regex  # 🆕 유니코드 속성 정규식
 from typing import List, Dict, Tuple, Optional, Callable, Any
 import logging
-from sa_embedders import compute_embeddings_with_cache  # 🔧 수정
+from sa.sa_embedders import compute_embeddings_with_cache  # 🔧 절대 import로 변경
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def align_tokens_with_embeddings(
     
     # embed_func가 없으면 기본 임베더 사용
     if embed_func is None:
-        from sa_embedders import compute_embeddings_with_cache
+        from .sa_embedders import compute_embeddings_with_cache
         embed_func = compute_embeddings_with_cache
     
     try:

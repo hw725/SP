@@ -16,7 +16,7 @@ DEFAULT_EMBEDDING_MODEL = 'BAAI/bge-m3'
 class EmbeddingManager:
     """임베딩 계산 및 캐시 관리 클래스 - 프로세스 안전"""
     
-    def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, fallback_to_dummy: bool = True):
+    def __init__(self, model_name: str = DEFAULT_EMBEDDING_MODEL, fallback_to_dummy: bool = True, device_id=None):
         self.model_name = model_name
         self.model = None
         self._cache = {}
@@ -24,6 +24,7 @@ class EmbeddingManager:
         self._model_loaded = False
         self._use_dummy = False
         self.process_id = os.getpid()
+        self.device_id = device_id
     
     def _load_model(self):
         """모델 로딩 (프로세스별)"""
@@ -38,14 +39,17 @@ class EmbeddingManager:
         
         try:
             from FlagEmbedding import BGEM3FlagModel
-            print(f"프로세스 {self.process_id}: BGE 모델 로딩 중...")
+            print(f"프로세스 {self.process_id}: BGE 모델 로딩 중... (device_id={self.device_id})")
             
             # 환경 변수 설정
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:256'
             
             # 디바이스 설정 (프로세스별로 GPU 메모리 분리)
             if torch.cuda.is_available():
-                device = f'cuda'
+                if self.device_id is not None:
+                    device = f'cuda:{self.device_id}'
+                else:
+                    device = 'cuda'
             else:
                 device = 'cpu'
             
@@ -57,7 +61,7 @@ class EmbeddingManager:
             
             self._model_loaded = True
             self._use_dummy = False
-            print(f"프로세스 {self.process_id}: BGE 모델 로딩 완료")
+            print(f"프로세스 {self.process_id}: BGE 모델 로딩 완료 (device={device})")
             
         except Exception as e:
             print(f"프로세스 {self.process_id}: BGE 모델 로딩 실패: {e}")
@@ -152,9 +156,10 @@ def compute_embeddings_with_cache(texts: List[str], **kwargs) -> np.ndarray:
     filtered_kwargs = {k: v for k, v in kwargs.items() if k in allowed_keys}
     return _embedding_manager.compute_embeddings_with_cache(texts, **filtered_kwargs)
 
-def get_embed_func() -> Callable:
-    """임베딩 함수 반환"""
-    return compute_embeddings_with_cache
+def get_embed_func(device_id=None) -> Callable:
+    """임베딩 함수 반환 (device_id 지정 가능)"""
+    manager = EmbeddingManager(fallback_to_dummy=True, device_id=device_id)
+    return manager.compute_embeddings_with_cache
 
 def get_embedding_manager() -> EmbeddingManager:
     """임베딩 매니저 반환"""

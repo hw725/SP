@@ -6,48 +6,62 @@ from tqdm import tqdm
 import multiprocessing as mp
 from typing import Dict, Any, List
 import math
+import sys, os
+
+CSP_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if CSP_ROOT not in sys.path:
+    sys.path.insert(0, CSP_ROOT)
 
 logger = logging.getLogger(__name__)
 
 # 전역 변수 (각 프로세스에서 초기화)
 worker_embed_func = None
 worker_modules = {}
+verbose_mode = False  # 기본적으로 비활성화
 
-def init_worker():
-    """워커 프로세스 초기화 - 한 번만 실행"""
+def set_verbose_mode(verbose=False):
+    """전역 verbose 모드 설정"""
+    global verbose_mode
+    verbose_mode = verbose
+
+def init_worker(device_id=None):
+    """워커 프로세스 초기화 - 한 번만 실행 (device_id로 GPU 분배)"""
     global worker_embed_func, worker_modules
     try:
-        print(f"워커 {mp.current_process().pid}: 초기화 시작")
+        if verbose_mode:
+            print(f"워커 {mp.current_process().pid}: 초기화 시작 (device_id={device_id})")
         
         # 임베더 초기화
         from sa_embedders import get_embed_func
-        worker_embed_func = get_embed_func()
+        worker_embed_func = get_embed_func(device_id=device_id)
         
         # 필요한 모듈들 임포트
-        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units
-        from aligner import align_src_tgt
+        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units, split_tgt_by_src_units_semantic
         from punctuation import mask_brackets, restore_brackets
         
         worker_modules = {
             'split_src_meaning_units': split_src_meaning_units,
             'split_tgt_meaning_units': split_tgt_meaning_units,
-            'align_src_tgt': align_src_tgt,
+            'split_tgt_by_src_units_semantic': split_tgt_by_src_units_semantic,
             'mask_brackets': mask_brackets,
             'restore_brackets': restore_brackets
         }
         
-        print(f"워커 {mp.current_process().pid}: 초기화 완료")
+        if verbose_mode:
+            print(f"워커 {mp.current_process().pid}: 초기화 완료 (device_id={device_id})")
         
     except Exception as e:
+        # 초기화 실패는 중요한 오류이므로 항상 출력
         print(f"워커 {mp.current_process().pid}: 초기화 실패: {e}")
         worker_embed_func = None
         worker_modules = {}
 
-def process_batch_sentences(sentence_batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def process_batch_sentences(sentence_batch: List[Dict[str, Any]], device_id=None) -> List[Dict[str, Any]]:
     """배치 단위 문장 처리 - 한 프로세스가 여러 문장 처리"""
     global worker_embed_func, worker_modules
     
     if worker_embed_func is None or not worker_modules:
+        # 중요 오류는 항상 출력
         print(f"워커 {mp.current_process().pid}: 초기화되지 않음")
         return []
     
@@ -64,7 +78,6 @@ def process_batch_sentences(sentence_batch: List[Dict[str, Any]]) -> List[Dict[s
             restore_brackets = worker_modules['restore_brackets']
             split_src_meaning_units = worker_modules['split_src_meaning_units']
             split_tgt_by_src_units_semantic = worker_modules['split_tgt_by_src_units_semantic']
-            align_src_tgt = worker_modules['align_src_tgt']
             
             # 처리 파이프라인
             masked_src, src_masks = mask_brackets(src_text, 'source')
@@ -74,29 +87,36 @@ def process_batch_sentences(sentence_batch: List[Dict[str, Any]]) -> List[Dict[s
             tgt_units = split_tgt_by_src_units_semantic(
                 src_units, masked_tgt, worker_embed_func, min_tokens=1
             )
-            aligned_pairs = align_src_tgt(src_units, tgt_units, worker_embed_func)
             
             # 결과 생성
-            for phrase_idx, (src_unit, tgt_unit) in enumerate(aligned_pairs, 1):
+            for phrase_idx, (src_unit, tgt_unit) in enumerate(zip(src_units, tgt_units), 1):
                 restored_src = restore_brackets(src_unit, src_masks)
                 restored_tgt = restore_brackets(tgt_unit, tgt_masks)
                 
                 results.append({
                     '문장식별자': sentence_id,
                     '구식별자': phrase_idx,
-                    '원문구': restored_src,
-                    '번역구': restored_tgt
+                    '원문': restored_src,
+                    '번역문': restored_tgt
                 })
             
         except Exception as e:
-            print(f"워커 {mp.current_process().pid}: 문장 {sentence_data.get('sentence_id', '?')} 실패: {e}")
+            if verbose_mode:
+                print(f"워커 {mp.current_process().pid}: 문장 {sentence_data.get('sentence_id', '?')} 실패: {e}")
+            logger.error(f"문장 {sentence_data.get('sentence_id', '?')} 처리 오류: {e}")
             continue
     
-    print(f"워커 {mp.current_process().pid}: 배치 {len(sentence_batch)}개 문장 처리 완료 → {len(results)}개 구")
+    if verbose_mode:
+        print(f"워커 {mp.current_process().pid}: 배치 {len(sentence_batch)}개 문장 처리 완료 → {len(results)}개 구")
+    
     return results
 
-def process_file(input_path: str, output_path: str, parallel: bool = False, workers: int = 4, batch_size: int = 20):
+def process_file(input_path: str, output_path: str, parallel: bool = False, workers: int = 4, 
+                batch_size: int = 20, device_ids=None, verbose: bool = False):
     """개선된 병렬 처리"""
+    
+    # verbose 모드 설정
+    set_verbose_mode(verbose)
     
     # 데이터 로드
     logger.info(f"파일 로드: {input_path}")
@@ -149,23 +169,31 @@ def process_file(input_path: str, output_path: str, parallel: bool = False, work
         
         logger.info(f"배치 분할: {len(sentence_batches)}개 배치, 배치당 평균 {batch_size_per_worker}개 문장")
         
+        # device id 분배
+        if device_ids is None:
+            # 기본: 워커 수만큼 device id를 0,1,2,...로 분배 (단일 GPU면 모두 0)
+            import torch
+            n_gpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
+            if n_gpu > 1:
+                device_ids = [i % n_gpu for i in range(workers)]
+            else:
+                device_ids = [0 for _ in range(workers)]
+        
         # 프로세스 풀로 배치 처리
-        with mp.Pool(processes=workers, initializer=init_worker) as pool:
+        with mp.Pool(processes=workers, initializer=init_worker, initargs=(device_ids[0],)) as pool:
             try:
-                # 비동기 배치 처리
                 async_results = []
                 for i, batch in enumerate(sentence_batches):
-                    async_result = pool.apply_async(process_batch_sentences, (batch,))
+                    device_id = device_ids[i % len(device_ids)]
+                    async_result = pool.apply_async(process_batch_sentences, (batch,), {'device_id': device_id})
                     async_results.append((i, async_result))
                 
-                # 결과 수집
+                # 결과 수집 - 타임아웃 제거
                 for batch_idx, async_result in tqdm(async_results, desc="배치 처리"):
                     try:
-                        batch_results = async_result.get(timeout=300)  # 5분 타임아웃
+                        batch_results = async_result.get()  # 타임아웃 제거
                         results.extend(batch_results)
                         logger.info(f"배치 {batch_idx+1}/{len(sentence_batches)} 완료: {len(batch_results)}개 구")
-                    except mp.TimeoutError:
-                        logger.error(f"배치 {batch_idx+1} 타임아웃")
                     except Exception as e:
                         logger.error(f"배치 {batch_idx+1} 처리 오류: {e}")
                         
@@ -178,13 +206,45 @@ def process_file(input_path: str, output_path: str, parallel: bool = False, work
     else:
         logger.info("순차 처리 시작")
         
-        # 순차 처리 (기존 코드와 동일)
-        from sa.embedders.embedder import get_embed_func
+        # 순차 처리
+        from sa_embedders import get_embed_func
         embed_func = get_embed_func()
         
+        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_by_src_units_semantic
+        from punctuation import mask_brackets, restore_brackets
+        
         for sentence_data in tqdm(sentence_data_list, desc="문장 처리"):
-            # ... 기존 순차 처리 로직 ...
-            pass
+            try:
+                sentence_id = sentence_data['sentence_id']
+                src_text = sentence_data['src_text']
+                tgt_text = sentence_data['tgt_text']
+                
+                # 처리 파이프라인
+                masked_src, src_masks = mask_brackets(src_text, 'source')
+                masked_tgt, tgt_masks = mask_brackets(tgt_text, 'target')
+                
+                src_units = split_src_meaning_units(masked_src)
+                tgt_units = split_tgt_by_src_units_semantic(
+                    src_units, masked_tgt, embed_func, min_tokens=1
+                )
+                
+                # 결과 생성
+                for phrase_idx, (src_unit, tgt_unit) in enumerate(zip(src_units, tgt_units), 1):
+                    restored_src = restore_brackets(src_unit, src_masks)
+                    restored_tgt = restore_brackets(tgt_unit, tgt_masks)
+                    
+                    results.append({
+                        '문장식별자': sentence_id,
+                        '구식별자': phrase_idx,
+                        '원문': restored_src,
+                        '번역문': restored_tgt
+                    })
+                
+            except Exception as e:
+                logger.error(f"문장 {sentence_data.get('sentence_id', '?')} 순차 처리 오류: {e}")
+                if verbose:
+                    print(f"순차 처리 문장 {sentence_data.get('sentence_id', '?')} 실패: {e}")
+                continue
     
     # 결과 저장 (기존과 동일)
     if not results:
@@ -199,3 +259,5 @@ def process_file(input_path: str, output_path: str, parallel: bool = False, work
     
     logger.info(f"처리 완료: {len(sentence_data_list)}개 문장 → {len(results)}개 구")
     logger.info(f"출력: {output_path}")
+    
+    return result_df
