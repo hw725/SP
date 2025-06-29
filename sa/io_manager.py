@@ -1,8 +1,19 @@
 """개선된 병렬 처리 - 작업 단위 분산"""
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError as e:
+    import logging
+    logging.error(f"\u274c pandas import 실패: {e}")
+    pd = None
+try:
+    from tqdm import tqdm
+except ImportError as e:
+    import logging
+    logging.error(f"\u274c tqdm import 실패: {e}")
+    def tqdm(x, *args, **kwargs):
+        return x
 import logging
 from pathlib import Path
-from tqdm import tqdm
 import multiprocessing as mp
 from typing import Dict, Any, List
 import math

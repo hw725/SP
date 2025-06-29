@@ -6,9 +6,36 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from tqdm import tqdm  # 진행률 표시 추가
 from io_utils import load_excel_file as load_excel, save_alignment_results as save_excel
-from sa_tokenizers import split_src_meaning_units, split_tgt_meaning_units  # jieba, mecab만 사용
-from sa_embedders import compute_embeddings_with_cache  # openai, bge만 지원
-from aligner import align_tokens_with_embeddings as align_tokens
+
+try:
+    from sa_tokenizers import split_src_meaning_units, split_tgt_meaning_units
+except ImportError as e:
+    import logging
+    logging.error(f"\u274c sa_tokenizers import 실패: {e}")
+    def split_src_meaning_units(*args, **kwargs):
+        logging.error("\u274c 토크나이저 기능을 사용할 수 없습니다.")
+        return []
+    def split_tgt_meaning_units(*args, **kwargs):
+        logging.error("\u274c 토크나이저 기능을 사용할 수 없습니다.")
+        return []
+try:
+    from sa_embedders import compute_embeddings_with_cache
+except ImportError as e:
+    import logging
+    logging.error(f"\u274c sa_embedders import 실패: {e}")
+    def compute_embeddings_with_cache(*args, **kwargs):
+        logging.error("\u274c 임베더 기능을 사용할 수 없습니다.")
+        import numpy as np
+        return np.zeros((len(args[0]), 1024))  # fallback shape
+try:
+    from aligner import align_tokens_with_embeddings as align_tokens
+except ImportError as e:
+    import logging
+    logging.error(f"\u274c aligner import 실패: {e}")
+    def align_tokens(*args, **kwargs):
+        logging.error("\u274c 정렬 기능을 사용할 수 없습니다.")
+        return []
+
 import time
 
 # punctuation import 안전 처리

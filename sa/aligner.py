@@ -5,7 +5,15 @@ import re
 import regex  # 🆕 유니코드 속성 정규식
 from typing import List, Dict, Tuple, Optional, Callable, Any
 import logging
-from sa.sa_embedders import compute_embeddings_with_cache  # 🔧 절대 import로 변경
+
+try:
+    from sa.sa_embedders import compute_embeddings_with_cache
+except ImportError as e:
+    logging.error(f"\u274c sa.sa_embedders import 실패: {e}")
+    def compute_embeddings_with_cache(*args, **kwargs):
+        logging.error("\u274c 임베더 기능을 사용할 수 없습니다.")
+        import numpy as np
+        return np.zeros((len(args[0]), 1024))  # fallback shape
 
 logger = logging.getLogger(__name__)
 

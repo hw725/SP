@@ -1,313 +1,74 @@
-"""PA 메인 프로세서 - 개선된 정렬"""
-
+import sys, os
 import pandas as pd
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+"""PA 메인 프로세서 - 의미적 병합만 사용 (단일 프로세스 버전)"""
 from typing import List, Dict
-import numpy as np
-from sentence_splitter import split_target_sentences_advanced, split_source_with_spacy
-import torch
-from aligner import get_embedder_function  # ✅ aligner의 임베더 함수만 사용
-
-def get_device(device_preference="cuda"):
-    if device_preference == "cuda" and not torch.cuda.is_available():
-        print("⚠️ CUDA(GPU)를 사용할 수 없습니다. CPU로 전환합니다.")
-        return "cpu"
-    return device_preference
-
-def improved_align_paragraphs(
-    tgt_sentences: List[str], 
-    src_chunks: List[str], 
-    embed_func,
-    similarity_threshold: float = 0.3
-) -> List[Dict]:
-    """개선된 정렬 - 1:1 매칭 보장"""
-    from sklearn.metrics.pairwise import cosine_similarity
-    import numpy as np
-
-    if not tgt_sentences or not src_chunks:
+from sentence_splitter import split_target_sentences_advanced
+try:
+    from aligner import get_embedder_function, improved_align_paragraphs
+except ImportError as e:
+    print(f"\u274c aligner import 실패: {e}")
+    def get_embedder_function(*args, **kwargs):
+        print("\u274c 임베더 기능을 사용할 수 없습니다.")
+        return None
+    def improved_align_paragraphs(*args, **kwargs):
+        print("\u274c 의미적 병합 기능을 사용할 수 없습니다.")
         return []
-
-    # 임베딩 생성 (항상 numpy array로 변환, shape 보정)
-    def safe_embed(texts):
-        embs = embed_func(texts)
-        # 리스트로 반환되는 경우 처리
-        if isinstance(embs, np.ndarray):
-            if embs.ndim == 1:
-                embs = embs.reshape(1, -1)
-            return embs
-        # 리스트/튜플인 경우
-        arrs = []
-        for i, emb in enumerate(embs):
-            if emb is None:
-                print(f"⚠️ 임베딩 None 발생, 0벡터로 대체: {texts[i]}")
-                arrs.append(np.zeros(768))  # 768은 일반적인 임베딩 차원, 필요시 자동 추정
-            else:
-                arr = np.array(emb)
-                if arr.ndim != 1:
-                    print(f"⚠️ 임베딩 차원 이상: {arr.shape}, 0벡터로 대체")
-                    arrs.append(np.zeros(768))
-                else:
-                    arrs.append(arr)
-        # 모든 벡터의 차원을 맞춤
-        dim = max(arr.shape[0] for arr in arrs)
-        arrs = [a if a.shape[0] == dim else np.pad(a, (0, dim - a.shape[0])) for a in arrs]
-        return np.stack(arrs, axis=0)
-
-    tgt_embeddings = safe_embed(tgt_sentences)
-    src_embeddings = safe_embed(src_chunks)
-
-    # 임베딩 차원 체크
-    if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
-        print(f"❌ 임베딩 차원 불일치: tgt={tgt_embeddings.shape}, src={src_embeddings.shape}")
-        return []
-
-    # 유사도 매트릭스 계산
-    sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
-
-    alignments = []
-
-    # ✅ 개선된 정렬: 길이에 따라 전략 선택
-    if len(tgt_sentences) == len(src_chunks):
-        # 1:1 순서 매칭
-        for i in range(len(tgt_sentences)):
-            alignments.append({
-                '원문': src_chunks[i],
-                '번역문': tgt_sentences[i],
-                'similarity': sim_matrix[i][i] if i < len(src_chunks) else 0.0,
-                'split_method': 'spacy_lg',
-                'align_method': 'sequential_1to1'
-            })
-
-    elif len(tgt_sentences) > len(src_chunks):
-        # 번역문이 더 많음: 원문을 여러 번역문에 분배
-        alignments = distribute_sources_to_targets(
-            tgt_sentences, src_chunks, sim_matrix, 'target_rich'
-        )
-
-    else:
-        # 원문이 더 많음: 번역문을 여러 원문에 분배
-        alignments = distribute_targets_to_sources(
-            tgt_sentences, src_chunks, sim_matrix, 'source_rich'
-        )
-
-    return alignments
-
-def distribute_sources_to_targets(
-    tgt_sentences: List[str], 
-    src_chunks: List[str], 
-    sim_matrix: np.ndarray,
-    method: str
-) -> List[Dict]:
-    """원문을 번역문에 분배"""
-    
-    alignments = []
-    src_per_tgt = len(tgt_sentences) // len(src_chunks)
-    remaining = len(tgt_sentences) % len(src_chunks)
-    
-    tgt_idx = 0
-    
-    for src_idx, src_chunk in enumerate(src_chunks):
-        # 현재 원문에 할당할 번역문 개수
-        assign_count = src_per_tgt + (1 if src_idx < remaining else 0)
-        
-        # 가장 유사한 번역문들 찾기
-        if tgt_idx < len(tgt_sentences):
-            end_idx = min(tgt_idx + assign_count, len(tgt_sentences))
-            
-            for t_idx in range(tgt_idx, end_idx):
-                similarity = sim_matrix[t_idx][src_idx] if t_idx < sim_matrix.shape[0] else 0.0
-                
-                alignments.append({
-                    '원문': src_chunk,
-                    '번역문': tgt_sentences[t_idx],
-                    'similarity': similarity,
-                    'split_method': 'spacy_lg',
-                    'align_method': method
-                })
-            
-            tgt_idx = end_idx
-    
-    # 남은 번역문 처리
-    while tgt_idx < len(tgt_sentences):
-        alignments.append({
-            '원문': "",
-            '번역문': tgt_sentences[tgt_idx],
-            'similarity': 0.0,
-            'split_method': 'spacy_lg',
-            'align_method': 'unmatched_target'
-        })
-        tgt_idx += 1
-    
-    return alignments
-
-def distribute_targets_to_sources(
-    tgt_sentences: List[str], 
-    src_chunks: List[str], 
-    sim_matrix: np.ndarray,
-    method: str
-) -> List[Dict]:
-    """번역문을 원문에 분배"""
-    
-    alignments = []
-    tgt_per_src = len(src_chunks) // len(tgt_sentences)
-    remaining = len(src_chunks) % len(tgt_sentences)
-    
-    src_idx = 0
-    
-    for tgt_idx, tgt_sentence in enumerate(tgt_sentences):
-        # 현재 번역문에 할당할 원문 개수
-        assign_count = tgt_per_src + (1 if tgt_idx < remaining else 0)
-        
-        if src_idx < len(src_chunks):
-            end_idx = min(src_idx + assign_count, len(src_chunks))
-            
-            # 첫 번째 원문과 매칭
-            if src_idx < len(src_chunks):
-                similarity = sim_matrix[tgt_idx][src_idx] if tgt_idx < sim_matrix.shape[0] else 0.0
-                
-                # 여러 원문을 합쳐서 하나의 매칭 생성
-                combined_src = " ".join(src_chunks[src_idx:end_idx])
-                
-                alignments.append({
-                    '원문': combined_src,
-                    '번역문': tgt_sentence,
-                    'similarity': similarity,
-                    'split_method': 'spacy_lg',
-                    'align_method': method
-                })
-            
-            src_idx = end_idx
-    
-    # 남은 원문 처리
-    while src_idx < len(src_chunks):
-        alignments.append({
-            '원문': src_chunks[src_idx],
-            '번역문': "",
-            'similarity': 0.0,
-            'split_method': 'spacy_lg',
-            'align_method': 'unmatched_source'
-        })
-        src_idx += 1
-    
-    return alignments
+from tqdm import tqdm
 
 def process_paragraph_file(
-    input_file: str, 
-    output_file: str, 
-    embedder_name: str = 'bge',
-    max_length: int = 150,
-    similarity_threshold: float = 0.3,
-    device: str = "cuda",
-    splitter: str = "spacy",
-    openai_model: str = None,
-    openai_api_key: str = None,
-    progress_callback=None,
-    stop_flag=None
+    input_file, 
+    output_file, 
+    embedder_name="bge", 
+    max_length=150, 
+    similarity_threshold=0.3, 
+    device="cuda"
 ):
-    """파일 단위 처리 (메인 함수)"""
-    
+    """
+    입력 엑셀 파일을 읽어 문단 단위로 정렬하고, 결과를 출력 파일로 저장합니다.
+    의미적 병합만 지원.
+    """
     print(f"📂 PA 파일 처리 시작: {input_file}")
-    
     try:
-        # Excel 파일 로드
         df = pd.read_excel(input_file)
         print(f"📄 {len(df)}개 문단 로드됨")
-        
     except FileNotFoundError:
         print(f"❌ 입력 파일을 찾을 수 없습니다: {input_file}")
         return None
     except Exception as e:
-        print(f"❌ 파일 로드 에러: {e}")
+        print(f"❌ 파일 로드 오류: {e}")
         return None
-    
-    # 필수 컬럼 확인
     if '원문' not in df.columns or '번역문' not in df.columns:
-        print(f"❌ 필수 컬럼이 없습니다: '원문', '번역문'")
-        print(f"현재 컬럼: {list(df.columns)}")
+        print(f"❌ 입력 파일에 '원문', '번역문' 컬럼이 없습니다.")
         return None
-    
-    # 임베더 로드
-    try:
-        embed_func = get_embedder_function(
-            embedder_name, 
-            device=device,
-            openai_model=openai_model,
-            openai_api_key=openai_api_key
-        )
-        print(f"🧠 임베더 로드 완료: {embedder_name} (device={device})")
-    except Exception as e:
-        print(f"❌ 임베더 로드 실패: {e}")
-        from aligner import fallback_embedder_bge
-        embed_func = fallback_embedder_bge(device)
-    
     all_results = []
     total = len(df)
-    for idx, row in df.iterrows():
-        if stop_flag and stop_flag.is_set():
-            print("⏹️ 사용자 중지 요청, 처리 중단")
-            break
-        src_paragraph = str(row.get('원문', '')).strip()
-        tgt_paragraph = str(row.get('번역문', '')).strip()
-        if not src_paragraph or not tgt_paragraph:
-            print(f"⚠️ 빈 내용 건너뜀: 행 {idx + 1}")
-            continue
-        try:
-            print(f"📝 처리 중: 문단 {idx + 1}/{total}")
-            
-            # 문장 분할
-            tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter=splitter)
-            src_chunks = split_source_with_spacy(src_paragraph, tgt_sentences, splitter=splitter)
-            
-            print(f"   번역문: {len(tgt_sentences)}개 문장")
-            print(f"   원문: {len(src_chunks)}개 청크")
-            
-            # ✅ 개선된 정렬 사용
+    for idx, row in tqdm(df.iterrows(), total=total, desc="전체 진행률"):
+        src_paragraph = str(row.get('원문', ''))
+        tgt_paragraph = str(row.get('번역문', ''))
+        if src_paragraph and tgt_paragraph:
+            tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="spacy")
+            embed_func = get_embedder_function(embedder_name, device=device)
             alignments = improved_align_paragraphs(
-                tgt_sentences, 
-                src_chunks, 
-                embed_func, 
+                tgt_sentences,
+                src_paragraph,
+                embed_func,
                 similarity_threshold
             )
-            
-            # 문단식별자 업데이트
-            for result in alignments:
-                result['문단식별자'] = idx + 1
+            for a in alignments:
+                a['문단식별자'] = idx + 1
             all_results.extend(alignments)
-            # 진행률 콜백 호출
-            if progress_callback:
-                progress_callback(idx + 1, total)
-        except Exception as e:
-            print(f"❌ 문단 {idx + 1} 처리 실패: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
-    
     if not all_results:
-        print("❌ 처리된 결과가 없습니다.")
+        print("❌ 결과가 없습니다.")
         return None
-    
-    # 결과 저장
-    try:
-        result_df = pd.DataFrame(all_results)
-        
-        # 컬럼 순서 정리
-        available_columns = result_df.columns.tolist()
-        desired_columns = ['문단식별자', '원문', '번역문', 'similarity', 'split_method', 'align_method']
-        final_columns = [col for col in desired_columns if col in available_columns]
-        
-        result_df = result_df[final_columns]
-        result_df.to_excel(output_file, index=False)
-        
-        print(f"💾 결과 저장 완료: {output_file}")
-        print(f"📊 총 {len(all_results)}개 문장 쌍 생성")
-        
-        # ✅ 결과 분석 추가
-        analyze_alignment_results(result_df)
-        
-        return result_df
-        
-    except Exception as e:
-        print(f"❌ 결과 저장 실패: {e}")
-        return None
+    result_df = pd.DataFrame(all_results)
+    final_columns = ['문단식별자', '원문', '번역문', 'similarity', 'split_method', 'align_method']
+    result_df = result_df[final_columns]
+    result_df.to_excel(output_file, index=False)
+    print(f"💾 결과 저장: {output_file}")
+    print(f"📊 총 {len(all_results)}개 문장 쌍 생성")
+    return result_df
 
 def analyze_alignment_results(result_df: pd.DataFrame):
     """정렬 결과 분석 (개선된 버전)"""

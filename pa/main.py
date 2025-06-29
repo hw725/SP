@@ -1,46 +1,37 @@
-"""PA 메인 실행기 - 완전 버전"""
+"""PA 메인 실행기 - 완전 버전 (병렬 처리 완전 제거)"""
 
 import sys
 import os
 import argparse
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 def check_dependencies():
-    """의존성 확인"""
-    
+    """의존성 및 환경 점검
+    - 필수 패키지, torch 등
+    """
     missing = []
-    
     try:
         import pandas
     except ImportError:
         missing.append("pandas")
-    
     try:
         import spacy
     except ImportError:
         missing.append("spacy")
-    
     try:
         import numpy
     except ImportError:
         missing.append("numpy")
-    
-    # ✅ sentence_transformers 체크 추가
     try:
-        import sentence_transformers
+        import torch
     except ImportError:
-        missing.append("sentence_transformers")
-    
+        missing.append("torch")
+    # transformers, sentence-transformers 체크 삭제
     if missing:
-        print(f"❌ 필수 패키지 누락: {', '.join(missing)}")
+        print(f"\u274c 필수 패키지 누락: {', '.join(missing)}")
         print("설치 명령: pip install " + " ".join(missing))
         return False
-    
-    # SA 모듈 확인
-    sa_path = os.path.join(os.path.dirname(__file__), '..', 'sa')
-    if not os.path.exists(sa_path):
-        print(f"❌ SA 모듈 경로가 없습니다: {sa_path}")
-        return False
-    
     return True
 
 def main(progress_callback=None, stop_flag=None):
@@ -56,12 +47,8 @@ def main(progress_callback=None, stop_flag=None):
     parser.add_argument("--embedder", default="bge", choices=["bge", "openai"])
     parser.add_argument("--threshold", type=float, default=0.3, help="유사도 임계값")
     parser.add_argument("--max-length", type=int, default=150, help="최대 문장 길이")
-    parser.add_argument("--parallel", action="store_true", help="병렬 처리")
     parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--device", default="cuda", help="임베더 연산 디바이스 (cuda/gpu/cpu, 기본값: cuda)")  # 기본값을 cuda로 변경
-    parser.add_argument("--splitter", default="spacy", choices=["spacy", "stanza"], help="문장 분할기 선택")
-    parser.add_argument("--openai-model", default="text-embedding-3-large", help="OpenAI 임베딩 모델명")
-    parser.add_argument("--openai-api-key", default=None, help="OpenAI API 키 (미입력시 환경변수 사용)")
+    parser.add_argument("--device", default="cuda", help="임베더 연산 디바이스 (cuda/gpu/cpu, 기본값: cuda)")
 
     args = parser.parse_args()
     
@@ -79,29 +66,14 @@ def main(progress_callback=None, stop_flag=None):
     try:
         from processor import process_paragraph_file
 
-        if args.parallel:
-            print("⚡ 병렬 처리 모드로 실행합니다.")
-            result_df = process_paragraph_file(
-                args.input_file,
-                args.output_file,
-                embedder_name=args.embedder,
-                max_length=args.max_length,
-                similarity_threshold=args.threshold,
-                device=args.device,
-                splitter=args.splitter,
-                parallel=True,
-                workers=4
-            )
-        else:
-            result_df = process_paragraph_file(
-                args.input_file,
-                args.output_file,
-                embedder_name=args.embedder,
-                max_length=args.max_length,
-                similarity_threshold=args.threshold,
-                device=args.device,
-                splitter=args.splitter
-            )
+        result_df = process_paragraph_file(
+            args.input_file,
+            args.output_file,
+            embedder_name=args.embedder,
+            max_length=args.max_length,
+            similarity_threshold=args.threshold,
+            device=args.device
+        )
         
         if result_df is not None:
             print(f"\n✅ PA 처리 완료!")

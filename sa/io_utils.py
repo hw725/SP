@@ -1,12 +1,16 @@
+import logging
 """파일 입출력 유틸리티 - 고정 컬럼명"""
 
-import pandas as pd
-import logging
 from typing import Optional
+try:
+    import pandas as pd
+except ImportError as e:
+    logging.error(f"\u274c pandas import 실패: {e}")
+    pd = None
 
 logger = logging.getLogger(__name__)
 
-def load_excel_file(file_path: str) -> Optional[pd.DataFrame]:
+def load_excel_file(file_path: str):
     """Excel 파일 로드 - 고정 컬럼명"""
     logger.info(f"📂 파일 로딩 중: {file_path}")
     
@@ -38,7 +42,7 @@ def load_excel_file(file_path: str) -> Optional[pd.DataFrame]:
         logger.error(f"❌ 파일 로드 실패: {e}")
         return None
 
-def save_alignment_results(df: pd.DataFrame, file_path: str) -> bool:
+def save_alignment_results(df, file_path: str) -> bool:
     """정렬 결과 저장"""
     logger.info(f"💾 결과 저장 중: {file_path}")
     
@@ -64,7 +68,7 @@ def save_alignment_results(df: pd.DataFrame, file_path: str) -> bool:
         logger.error(f"❌ 결과 저장 실패: {e}")
         return False
 
-def save_phrase_format_results(df: pd.DataFrame, file_path: str) -> bool:
+def save_phrase_format_results(df, file_path: str) -> bool:
     """구 단위별 분할 결과 저장"""
     logger.info(f"💾 구 단위 결과 저장 중: {file_path}")
     
