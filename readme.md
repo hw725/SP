@@ -6,7 +6,9 @@
 
 ## 주요 특징
 - SA: 문장/구 단위 정렬 (원문: jieba, 번역문: mecab)
-- PA: 문단→문장 분할 및 정렬 (spaCy 기반)
+- PA: 문단→문장 분할 및 정렬 (spaCy는 번역문 분할에만 사용, 원문은 의미적 병합만 사용)
+- **원문(한문/중문)은 항상 공백/구두점 기준 토큰화 후, 임베딩 유사도 기반으로 번역문 개수에 맞게 의미적으로 병합**
+- spaCy 기반 원문 분할, huggingface/transformers/sentence-transformers 등 모든 불필요한 코드/의존성/분기 완전 제거
 - 지원 임베더: BGE-M3, OpenAI(모델/키 직접 선택)
 - 실시간 진행률(터미널 tqdm/GUI progress bar), 캐시, 상세 로그 지원
 - CLI/GUI 환경에서 대용량/고품질 정렬에 최적화
@@ -28,9 +30,10 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 
 ---
 
-## 환경설정 및 설치 (SA/PA 임베딩 연동 완벽 지원)
+## 환경설정 및 설치 (Poetry 기반)
 1. **가상환경 생성 및 활성화**
-   - venv (Windows/Linux/WSL)
+   - venv, conda 등 어떤 가상환경이든 사용 가능 (권장)
+   - 예시(venv):
      ```bash
      python -m venv venv
      # Windows
@@ -38,18 +41,34 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
      # Linux/WSL
      source venv/bin/activate
      ```
-   - conda (권장: 대규모/ML 환경, 환경파일 제공)
+   - 예시(conda):
      ```bash
-     conda env create -f environment.yml  # pa/sa 폴더의 environment.yml 사용
-     conda activate csp-pa  # 또는 csp-sa
+     conda create -n csp python=3.10
+     conda activate csp
      ```
-2. **필수 패키지 설치**
-   - venv 사용 시: `pip install -r requirements.txt`
-   - conda 환경은 environment.yml로 자동 설치
-   - Windows: mecab-python3가 반드시 필요 (requirements.txt에 포함)
-   - Linux/WSL: mecab-ko, mecab-ko-dic, mecab-python3 모두 설치 권장
-   - GPU 사용: torch/torchvision/torchaudio는 CUDA 버전에 맞게 설치 필요
-3. **mecab 사용자 사전/한자어 지원 적용 방법**
+2. **Poetry 설치**
+   - Poetry가 없다면 먼저 설치:
+     ```bash
+     pip install poetry
+     # 또는 공식 설치법 참고: https://python-poetry.org/docs/#installation
+     ```
+3. **의존성 설치 (Poetry 사용)**
+   - 프로젝트 루트에서:
+     ```bash
+     poetry install
+     ```
+   - poetry가 자동으로 pyproject.toml/poetry.lock 기반 모든 패키지 설치
+   - poetry 환경에서 실행하려면:
+     ```bash
+     poetry run python pa/main.py ...
+     poetry run python sa/main.py ...
+     ```
+   - poetry shell로 진입해도 됨:
+     ```bash
+     poetry shell
+     python pa/main.py ...
+     ```
+4. **mecab 사용자 사전/한자어 지원 적용 방법**
    - stuser.dic은 표준국어대사전에서 한자어만 추출하여 만든 mecab 사용자 사전으로, 이번 업데이트에 함께 제공
     1. 사용자 사전 csv(stuser.csv)를 mecab-dict-index로 컴파일하여 stuser.dic 생성
         - mecab-dict-index 실행 파일이 있는 경로로 이동 후 아래 명령어 실행
@@ -68,11 +87,16 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
    - 여러 사용자 사전을 함께 쓰고 싶으면 csv를 미리 병합하여 하나의 dic으로 컴파일
    - stuser.dic을 mecab-ko-dic 폴더에 복사하면 -u stuser.dic처럼 파일명만 지정해도 됨
    - 현재는 기본 mecab-ko-dic 또는 직접 생성한 사용자 사전만 사용 가능
-4. **spaCy 모델 설치 (최초 1회)**
+5. **spaCy 모델 설치 (최초 1회, 번역문 분할에만 필요)**
    ```bash
-   python -m spacy download ko_core_news_lg
-   python -m spacy download zh_core_web_lg
+   poetry run python -m spacy download ko_core_news_lg
+   poetry run python -m spacy download zh_core_web_lg
    ```
+6. **(GPU 사용 시) PyTorch CUDA wheel 별도 설치**
+   - poetry 환경에서 아래 명령 실행:
+     ```bash
+     poetry run pip install torch==2.7.1+cu128 torchvision==0.22.1+cu128 torchaudio==2.7.1+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
+     ```
 
 ---
 
@@ -98,8 +122,9 @@ python pa/main.py ...
 
 ## 문제 해결
 - 오류 발생 시 Issues로 문의
-- spaCy 모델은 최초 실행 시 자동 다운로드 (수동 설치 권장)
+- spaCy 모델은 최초 실행 시 자동 다운로드 (수동 설치 권장, 번역문 분할에만 필요)
 - mecab 관련 ImportError 발생 시 mecab-python3 설치 여부 확인
+- huggingface/transformers/sentence-transformers 등은 더 이상 필요 없음
 
 ---
 
@@ -126,7 +151,8 @@ python pa/main.py ...
 | 1 | 2 | 有朋自遠方來 不亦樂乎 | 벗이 먼 곳에서 찾아오면 또한 즐겁지 아니한가 |
 | 1 | 3 | 人不知而不慍 不亦君子乎 | 남이 알아주지 않아도 성내지 않으면 또한 군자가 아니겠는가 |
 
-실제 샘플 Excel 파일은 gitignore에 포함시키고, readme의 표만 참고
+- **원문(한문/중문)은 spaCy로 분할하지 않고, 항상 공백/구두점 기준 토큰화 후 의미적으로 병합**
+- 번역문(한국어/중국어)은 spaCy로 의미 단위 분할
 
 ---
 
