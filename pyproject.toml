@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "csp"
 version = "0.1.0"
-description = "Multilingual NLP project with Korean/Chinese support"
+description = "Multilingual NLP project with Korean/ClassicalChinese support"
 authors = ["hw725 <hw725@g.skku.edu>"]
 readme = "README.md"
 package-mode = false
@@ -45,6 +45,13 @@ mecab-python3 = ">=1.0.0"
 # CUDA 환경에서 PyTorch를 사용할 경우 아래 명령을 반드시 실행하세요:
 # poetry run pip install torch==2.7.1+cu128 torchvision==0.22.1+cu128 torchaudio==2.7.1+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
 # -----------------------------------
+
+# PyTorch (CPU 전용) - 반드시 pip로 별도 설치
+# 설치 명령: poetry run pip install torch==2.7.1+cpu torchvision==0.22.1+cpu torchaudio==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
+# 아래는 의존성 명시만, 실제 설치는 requirements.txt 참고
+# torch = "2.7.1+cpu"
+# torchvision = "0.22.1+cpu"
+# torchaudio = "2.7.1+cpu"
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "*"

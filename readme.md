@@ -97,6 +97,12 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
      ```bash
      poetry run pip install torch==2.7.1+cu128 torchvision==0.22.1+cu128 torchaudio==2.7.1+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
      ```
+7. **(CPU 사용 시) PyTorch CPU wheel 별도 설치**
+   - poetry 환경에서 아래 명령 실행:
+     ```bash
+     poetry run pip install torch==2.7.1+cpu torchvision==0.22.1+cpu torchaudio==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
+     ```
+   - 위 명령은 CUDA가 없는 환경(일반 PC/서버/노트북 등)에서 사용하세요.
 
 ---
 
