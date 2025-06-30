@@ -1,4 +1,4 @@
-"""고전 한문 BERT 계열 토크나이저 래퍼"""
+"""고전 한문 BERT 계열 토크나이저 래퍼 - 의존성 충돌로 사용하지 않음"""
 from typing import List, Optional
 from transformers import AutoTokenizer
 
