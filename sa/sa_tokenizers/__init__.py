@@ -2,6 +2,7 @@
 
 from .jieba_mecab import (
     split_tgt_meaning_units,  # 번역문(mecab)
+    split_tgt_meaning_units_sequential,  # 🆕 순차 분할 방식
     tokenize_text,
     pos_tag_text,
     sentence_split,
@@ -18,6 +19,7 @@ def split_src_meaning_units(text: str, *args, **kwargs):
 __all__ = [
     'split_src_meaning_units',
     'split_tgt_meaning_units', 
+    'split_tgt_meaning_units_sequential',  # 🆕 순차 분할 추가
     'split_tgt_by_src_units_semantic',
     'split_tgt_by_src_units',
     'tokenize_text',

@@ -574,28 +574,28 @@ def _dp_semantic_matching(src_units: List[str], tgt_text: str, embed_func: Calla
 def split_tgt_meaning_units(
     src_text: str,
     tgt_text: str,
-    use_semantic: bool = True,
+    use_semantic: bool = False,  # 기본값을 False로 변경 (순차 모드 우선)
     min_tokens: int = DEFAULT_MIN_TOKENS,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     embed_func: Callable = None
 ) -> List[str]:
-    """번역문을 의미 단위로 분할"""
-    # 지연 임포트로 순환 참조 방지
+    """번역문을 의미 단위로 분할 - 순차 방식 우선"""
+    
+    # 기본적으로 순차 분할 사용 (순서 보장)
+    if not use_semantic:
+        return split_tgt_meaning_units_sequential(
+            src_text, tgt_text, min_tokens, max_tokens
+        )
+    
+    # 기존 의미 기반 방식 (하위 호환용)
     if embed_func is None:
-        from sa_embedders import compute_embeddings_with_cache  # 🔧 수정
+        from sa_embedders import compute_embeddings_with_cache
         embed_func = compute_embeddings_with_cache
         
     src_units = split_src_meaning_units(src_text, min_tokens, max_tokens)
-
-    if use_semantic:
-        return split_tgt_by_src_units_semantic(
-            src_units,
-            tgt_text,
-            embed_func=embed_func,
-            min_tokens=min_tokens
-        )
-    else:
-        return split_tgt_by_src_units(src_units, tgt_text)
+    return split_tgt_by_src_units_semantic(
+        src_units, tgt_text, embed_func=embed_func, min_tokens=min_tokens
+    )
 
 def tokenize_text(text):
     """형태소 분석 및 토큰화 - MeCab 사용"""
@@ -783,3 +783,139 @@ def _should_break_by_mecab_src(word: str, morpheme_info: List[tuple]) -> bool:
     
     # 2. 일반적인 MeCab 분석 결과 확인 (번역문과 동일)
     return _should_break_by_mecab(word, morpheme_info)
+
+def split_by_whitespace_and_colon(text: str) -> List[str]:
+    """공백 및 전각 콜론 기준 분할 (PA 방식과 동일)"""
+    if not text or not text.strip():
+        return []
+    
+    # 1단계: 전각 콜론 기준 분할
+    parts = text.split('：')
+    if len(parts) > 1:
+        # 첫 번째 부분에 콜론 붙이기
+        parts[0] = parts[0] + '：'
+        # 나머지 부분들은 그대로
+    
+    # 2단계: 각 부분을 공백 기준으로 분할
+    result = []
+    for part in parts:
+        words = part.strip().split()
+        result.extend(words)
+    
+    return [word for word in result if word.strip()]
+
+def merge_target_by_source_sequential(src_units: List[str], tgt_tokens: List[str]) -> List[str]:
+    """원문 단위 기준으로 번역문 토큰을 순차적으로 병합 (PA 방식)"""
+    if not src_units or not tgt_tokens:
+        return tgt_tokens if tgt_tokens else []
+    
+    # 원문과 번역문 비율 계산
+    src_count = len(src_units)
+    tgt_count = len(tgt_tokens)
+    
+    if src_count == 1:
+        # 원문이 하나면 번역문 전체를 하나로
+        return [' '.join(tgt_tokens)]
+    
+    # 번역문 토큰을 원문 개수만큼 분할
+    tokens_per_unit = tgt_count // src_count
+    remainder = tgt_count % src_count
+    
+    result = []
+    start_idx = 0
+    
+    for i in range(src_count):
+        # 나머지가 있으면 앞쪽 단위들에 하나씩 더 배분
+        current_size = tokens_per_unit + (1 if i < remainder else 0)
+        end_idx = start_idx + current_size
+        
+        if end_idx > tgt_count:
+            end_idx = tgt_count
+        
+        if start_idx < end_idx:
+            unit_tokens = tgt_tokens[start_idx:end_idx]
+            result.append(' '.join(unit_tokens))
+        
+        start_idx = end_idx
+    
+    return result
+
+def split_tgt_meaning_units_sequential(
+    src_text: str,
+    tgt_text: str,
+    min_tokens: int = DEFAULT_MIN_TOKENS,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    **kwargs
+) -> List[str]:
+    """순차적 분할 방식 - 순서 보장, 쉼표 분할 지원"""
+    
+    # 1단계: 원문 의미 단위 분할
+    src_units = split_src_meaning_units(src_text, min_tokens, max_tokens)
+    
+    # 2단계: 번역문을 자연스럽게 분할 (쉼표, 콜론, MeCab 기준)
+    tgt_chunks = split_inside_chunk(tgt_text)
+    
+    # 3단계: 원문 개수에 맞춰 번역문 조정
+    if len(src_units) == len(tgt_chunks):
+        # 1:1 매칭 - 순서 그대로 유지
+        return tgt_chunks
+    elif len(src_units) == 1:
+        # 원문 1개 - 번역문 전체 합치기
+        return [tgt_text.strip()]
+    elif len(tgt_chunks) == 1:
+        # 번역문 1개 - 원문 개수만큼 단순 분할
+        return _simple_split_by_tokens(tgt_text, len(src_units))
+    elif len(tgt_chunks) > len(src_units):
+        # 번역문이 많음 - 순차적 병합
+        return _merge_target_chunks_sequential(tgt_chunks, len(src_units))
+    else:
+        # 원문이 많음 - 번역문 단순 분할
+        return _simple_split_by_tokens(tgt_text, len(src_units))
+
+def _simple_split_by_tokens(text: str, target_count: int) -> List[str]:
+    """텍스트를 토큰 기준으로 단순 분할"""
+    tokens = text.split()
+    if len(tokens) <= target_count:
+        return [text]
+    
+    tokens_per_unit = len(tokens) // target_count
+    remainder = len(tokens) % target_count
+    
+    result = []
+    start = 0
+    
+    for i in range(target_count):
+        current_size = tokens_per_unit + (1 if i < remainder else 0)
+        end = start + current_size
+        
+        if start < len(tokens):
+            segment = ' '.join(tokens[start:end]).strip()
+            if segment:
+                result.append(segment)
+        start = end
+    
+    return result
+
+def _merge_target_chunks_sequential(chunks: List[str], target_count: int) -> List[str]:
+    """번역문 청크를 순차적으로 병합"""
+    if len(chunks) <= target_count:
+        return chunks
+    
+    result = chunks[:]
+    
+    while len(result) > target_count:
+        # 가장 짧은 인접한 두 청크 병합
+        min_length = float('inf')
+        merge_idx = 0
+        
+        for i in range(len(result) - 1):
+            combined_length = len(result[i]) + len(result[i + 1])
+            if combined_length < min_length:
+                min_length = combined_length
+                merge_idx = i
+        
+        # 병합 실행
+        merged = result[merge_idx] + ' ' + result[merge_idx + 1]
+        result = result[:merge_idx] + [merged] + result[merge_idx + 2:]
+    
+    return result

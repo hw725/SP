@@ -51,6 +51,7 @@ def process_sentence(
     src_text: str,
     tgt_text: str,
     use_semantic: bool = True,
+    use_sequential: bool = False,  # 🆕 순차 모드 옵션 추가
     min_tokens: int = 1,
     max_tokens: int = 10,
     **kwargs
@@ -70,6 +71,7 @@ def process_sentence(
             src_text,
             tgt_text,
             use_semantic=use_semantic,
+            use_sequential=use_sequential,  # 🆕 순차 모드 전달
             min_tokens=min_tokens,
             max_tokens=max_tokens,
             embed_func=compute_embeddings_with_cache if use_semantic else None
