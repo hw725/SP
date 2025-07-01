@@ -42,8 +42,7 @@ def split_src_meaning_units(
     by_space: bool = False,
     **kwargs
 ):
-    """원문(한문)은 무조건 jieba로 의미 단위 분할 (tokenizer 인자 무시)"""
-    # tokenizer 인자 무시, 무조건 jieba 사용
+    """원문(한문+한글)을 jieba와 MeCab으로 의미 단위 분할"""
     
     # 1단계: 어절 단위로 분리 (어절 내부는 절대 쪼개지지 않음)
     # 전각 콜론 뒤에만 공백을 추가하여 "전운(箋云)：" + "갈대는" 형태로 분할
@@ -51,38 +50,52 @@ def split_src_meaning_units(
     if not words:
         return []
     
-    # 2단계: jieba 분석 결과 참고
+    # 2단계: jieba와 MeCab 분석 결과 준비
     jieba_tokens = list(jieba.cut(text))
     
-    # 3단계: 기본 패턴 매칭으로 어절들을 의미 단위로 그룹화
+    # MeCab 분석 (한글 부분용)
+    morpheme_info = []
+    if mecab:
+        result = mecab.parse(text)
+        for line in result.split('\n'):
+            if line and line != 'EOS':
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    surface = parts[0]
+                    pos = parts[1].split(',')[0]
+                    morpheme_info.append((surface, pos))
+    
+    # 3단계: 어절들을 의미 단위로 그룹화 (jieba + MeCab 정보 활용)
     units = []
     i = 0
     
     while i < len(words):
         word = words[i]
         
-        # 한자+조사 패턴 (디폴트로 항상 수행)
+        # 한자 포함 어절 처리
         if hanja_re.search(word):
             # 현재 어절이 한자를 포함하면 하나의 의미 단위
             units.append(word)
             i += 1
             continue
         
-        # 한글 어절들 처리 - jieba 분석 결과 참고
+        # 한글 어절들 처리 - jieba와 MeCab 분석 결과 모두 참고
         if hangul_re.match(word):
-            # jieba가 제안하는 경계를 참고해서 의미 단위 결정
             group = [word]
             j = i + 1
             
-            # 다음 어절들과 묶을지 jieba 결과 참고해서 결정
-            while j < len(words) and hangul_re.match(words[j]):
-                # jieba 토큰에서 연속성 확인
-                should_group = _should_group_words_by_jieba(group + [words[j]], jieba_tokens)
-                if should_group:
-                    group.append(words[j])
-                    j += 1
-                else:
-                    break
+            # 중세국어 어미나 문법 표지로 경계 판단 (원문용)
+            should_break_here = _should_break_by_mecab_src(word, morpheme_info) if morpheme_info else False
+            
+            # jieba 토큰 연속성도 확인 (경계 신호가 없는 경우만)
+            if not should_break_here:
+                while j < len(words) and hangul_re.match(words[j]):
+                    should_group = _should_group_words_by_jieba(group + [words[j]], jieba_tokens)
+                    if should_group:
+                        group.append(words[j])
+                        j += 1
+                    else:
+                        break
             
             units.append(' '.join(group))
             i = j
@@ -161,39 +174,39 @@ def split_inside_chunk(chunk: str) -> List[str]:
 def _should_break_by_mecab(word: str, morpheme_info: List[tuple]) -> bool:
     """MeCab 분석 결과를 참고해서 의미 단위 경계 결정 - 보조사(JX) 강화"""
     
-    # word에 해당하는 형태소들의 품사 확인 - 정확한 매칭
+    # MeCab 분석 결과 확인
     for surface, pos in morpheme_info:
         # 단어가 해당 형태소로 끝나는지 확인 (더 정확한 매칭)
         if word.endswith(surface):
-            # 1. 강한 경계 신호 - 종결어미, 구두점
+            # 강한 경계 신호 - 종결어미, 구두점
             if pos in ['EF', 'SF', 'SP']:
                 return True
             
-            # 2. 보조사(JX) - 매우 중요한 문법적 표지로 강화 처리
+            # 보조사(JX) - 매우 중요한 문법적 표지로 강화 처리
             if pos == 'JX':
                 return True  # 모든 보조사에서 분할
             
-            # 3. 주요 조사들 - 의미 단위 경계
+            # 주요 조사들 - 의미 단위 경계
             if pos in ['JKS', 'JKO', 'JKC', 'JKB', 'JKG', 'JKV', 'JKQ']:
                 return True  # 모든 조사에서 분할
             
-            # 4. 연결어미(EC) - 문장 연결
+            # 연결어미(EC) - 문장 연결
             if pos == 'EC':
                 return True  # 모든 연결어미에서 분할
             
-            # 5. 명사형 전성어미(ETN) - 명사화
+            # 명사형 전성어미(ETN) - 명사화
             if pos == 'ETN':
                 return True
             
-            # 6. 관형형 전성어미(ETM) - 관형어화
+            # 관형형 전성어미(ETM) - 관형어화
             if pos == 'ETM':
                 return True
             
-            # 7. 동사, 형용사 어간 다음에서 경계  
+            # 동사, 형용사 어간 다음에서 경계  
             if pos in ['VV', 'VA', 'VX']:
                 return len(surface) >= 1  # 길이 1 이상인 용언 어간에서 분할
             
-            # 8. 중요한 부사에서 분할 (MAG, MAJ)
+            # 중요한 부사에서 분할 (MAG, MAJ)
             if pos in ['MAG', 'MAJ'] and len(surface) >= 2:
                 return True  # 길이 2 이상인 부사에서 분할
     
@@ -736,3 +749,24 @@ def _force_split_by_semantic_boundaries(src_units: List[str], single_tgt: str, e
         result = [single_tgt]
     
     return result
+
+def _should_break_by_mecab_src(word: str, morpheme_info: List[tuple]) -> bool:
+    """원문용 - MeCab 분석 결과 + 중세국어 어미 패턴으로 의미 단위 경계 결정"""
+    
+    # 1. 중세국어 어미 패턴 확인 (원문에만 적용)
+    middle_korean_endings = [
+        '니라', '노라', '도다', '로다', '가다', '거다',  # 종결어미
+        '려니와', '거니와', '로되', '되',              # 연결어미
+        '건댄', '건대', '어니', '거니',               # 연결어미
+        '하니', '하되', '하여', '하야',               # 연결어미
+        '이니', '이로', '이며', '이면',               # 연결어미
+        '은즉', '즉', '면', '니',                    # 연결어미
+        '라도', '마는', '나마', '려마는'              # 보조사/연결어미
+    ]
+    
+    for ending in middle_korean_endings:
+        if word.endswith(ending):
+            return True
+    
+    # 2. 일반적인 MeCab 분석 결과 확인 (번역문과 동일)
+    return _should_break_by_mecab(word, morpheme_info)
