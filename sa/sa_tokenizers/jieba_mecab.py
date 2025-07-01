@@ -153,6 +153,12 @@ def split_inside_chunk(chunk: str) -> List[str]:
     for word in words:
         current_group.append(word)
         
+        # 쉼표 분할을 최우선으로 처리 (다른 조건보다 먼저)
+        if word.endswith(',') or word.endswith('，'):
+            units.append(' '.join(current_group))
+            current_group = []
+            continue
+        
         # 전각 콜론으로 끝나는 단어는 즉시 단위 완성 (하드 경계)
         if word.endswith('：') or word == '：':
             units.append(' '.join(current_group))
@@ -338,8 +344,8 @@ def split_tgt_by_src_units_semantic(
     
     # 3단계: 의미 기반 전역 매칭
     if len(src_units) == len(tgt_chunks):
-        # 1:1 대응인 경우 의미 유사도로 최적 매칭 찾기
-        return _find_optimal_semantic_matching(src_units, tgt_chunks, embed_func)
+        # 1:1 대응인 경우 의미 유사도로 최적 매칭 찾기 (순서 보존)
+        return _find_optimal_semantic_matching(src_units, tgt_chunks, embed_func, preserve_order=True)
     elif len(src_units) == 1:
         # 원문이 하나인 경우 - 번역문을 하나로 합치거나 DP 매칭 사용
         if len(tgt_chunks) <= 3:  # 작은 개수면 하나로 합치기
@@ -354,11 +360,15 @@ def split_tgt_by_src_units_semantic(
         # 개수가 다른 경우 DP 매칭 사용
         return _dp_semantic_matching(src_units, tgt_text, embed_func, min_tokens)
 
-def _find_optimal_semantic_matching(src_units: List[str], tgt_chunks: List[str], embed_func: Callable) -> List[str]:
-    """원문과 번역문 청크 간의 최적 의미 매칭 찾기 (개선된 버전)"""
+def _find_optimal_semantic_matching(src_units: List[str], tgt_chunks: List[str], embed_func: Callable, preserve_order: bool = True) -> List[str]:
+    """원문과 번역문 청크 간의 최적 의미 매칭 찾기 (순서 보존 옵션 추가)"""
     import itertools
     
     if len(src_units) != len(tgt_chunks):
+        return tgt_chunks
+    
+    # 순서 보존 모드인 경우 재정렬 없이 그대로 반환
+    if preserve_order:
         return tgt_chunks
     
     try:
@@ -392,8 +402,11 @@ def _find_optimal_semantic_matching(src_units: List[str], tgt_chunks: List[str],
                 # 5. 길이 균형 보너스 (너무 불균형한 매칭 방지)
                 length_bonus = _calculate_length_balance_bonus(src_units[i], tgt_chunks[j])
                 
+                # 6. 순서 보존 보너스 (원래 순서 유지 선호)
+                order_bonus = 0.3 if i == j else -0.1  # 원래 순서면 보너스, 아니면 페널티
+                
                 total_score += (sim * 1.0 + keyword_bonus * 0.8 + grammar_bonus * 0.6 + 
-                               structure_bonus * 0.5 + length_bonus * 0.3)
+                               structure_bonus * 0.5 + length_bonus * 0.3 + order_bonus)
             
             if total_score > best_score:
                 best_score = total_score
