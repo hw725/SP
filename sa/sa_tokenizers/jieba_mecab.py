@@ -45,6 +45,7 @@ def split_src_meaning_units(
     # tokenizer 인자 무시, 무조건 jieba 사용
     
     # 1단계: 어절 단위로 분리 (어절 내부는 절대 쪼개지지 않음)
+    # 전각 콜론 뒤에만 공백을 추가하여 "전운(箋云)：" + "갈대는" 형태로 분할
     words = text.replace('\n', ' ').replace('：', '： ').split()
     if not words:
         return []
@@ -114,7 +115,8 @@ def split_inside_chunk(chunk: str) -> List[str]:
         return []
     
     # 1단계: 어절 단위로 분리 (어절 내부는 절대 쪼개지지 않음)
-    words = chunk.split()
+    # 전각 콜론 뒤에만 공백을 추가하여 "전운(箋云)：" + "갈대는" 형태로 분할
+    words = chunk.replace('：', '： ').split()
     if not words:
         return []
     
@@ -130,22 +132,21 @@ def split_inside_chunk(chunk: str) -> List[str]:
                     pos = parts[1].split(',')[0]
                     morpheme_info.append((surface, pos))
     
-    # 3단계: 기본 패턴으로 어절들을 의미 단위로 그룹화
-    delimiters = ['을', '를', '이', '가', '은', '는', '에', '에서', '로', '으로', '으니', '이니', '하니', '되니', '는데', '인데',
-                  '와', '과', '며', '하고', '이고', '때', '의', '도', '만', '때에', '것은', '이는', '이면', '하면', '되면', '으면', '：']
-    
+    # 3단계: MeCab 분석 결과를 활용한 의미 단위 그룹화
     units = []
     current_group = []
     
     for word in words:
         current_group.append(word)
         
-        # 기본 패턴: 조사/어미로 끝나면 의미 단위 완성
-        should_break = any(word.endswith(delimiter) for delimiter in delimiters)
+        # 전각 콜론으로 끝나는 단어는 즉시 단위 완성 (하드 경계)
+        if word.endswith('：') or word == '：':
+            units.append(' '.join(current_group))
+            current_group = []
+            continue
         
-        # MeCab 분석 결과 참고: 품사 정보로 경계 조정
-        if morpheme_info and not should_break:
-            should_break = _should_break_by_mecab(word, morpheme_info)
+        # MeCab 분석 결과로 경계 판단 (품사 정보 활용)
+        should_break = _should_break_by_mecab(word, morpheme_info) if morpheme_info else False
         
         if should_break and current_group:
             units.append(' '.join(current_group))
@@ -272,7 +273,34 @@ def split_tgt_by_src_units_semantic(
     min_tokens: int = DEFAULT_MIN_TOKENS
 ) -> List[str]:
     """원문 단위에 따른 번역문 분할 (의미 기반, 임베딩 batch 처리)"""
-    tgt_tokens = tgt_text.split()
+    
+    # 1단계: 전각 콜론을 하드 경계로 처리
+    if '：' in tgt_text:
+        # 전각 콜론 기준으로 분할
+        colon_parts = tgt_text.split('：')
+        if len(colon_parts) == 2:
+            # "전운(箋云)" + "갈대는..." 형태
+            part1 = colon_parts[0].strip() + '：'
+            part2 = colon_parts[1].strip()
+            
+            # 첫 번째 부분은 항상 별도 단위
+            result = [part1]
+            
+            # 두 번째 부분은 남은 원문 단위들과 매칭
+            if len(src_units) > 1:
+                remaining_src = src_units[1:]
+                remaining_parts = split_tgt_by_src_units_semantic(
+                    remaining_src, part2, embed_func, min_tokens
+                )
+                result.extend(remaining_parts)
+            else:
+                result.append(part2)
+            
+            return result
+    
+    # 2단계: 기존 로직 (전각 콜론이 없는 경우)
+    # 전각 콜론 처리를 split_inside_chunk와 동일하게 적용
+    tgt_tokens = tgt_text.replace('：', '： ').split()
     N, T = len(src_units), len(tgt_tokens)
     if N == 0 or T == 0:
         return []
@@ -281,7 +309,9 @@ def split_tgt_by_src_units_semantic(
     back = np.zeros((N+1, T+1), dtype=int)
     dp[0, 0] = 0.0
 
-    src_embs = embed_func(src_units)
+    # 원문 단위들을 정규화하여 임베딩 계산
+    normalized_src_units = [_normalize_for_embedding(unit) for unit in src_units]
+    src_embs = embed_func(normalized_src_units)
 
     # 1. 모든 후보 span을 미리 수집 (strip, 중복 완전 제거)
     span_map = {}  # (k, j) -> span string
@@ -297,11 +327,14 @@ def split_tgt_by_src_units_semantic(
     # 필요시 완전 중복 제거
     all_spans = list(set(all_spans))
 
-    # 2. batch 100개 제한 처리 (embed_func가 내부적으로 지원하지 않으면)
+    # 2. batch 100개 제한 처리 - 정규화된 span으로 임베딩 계산
     def batch_embed(spans, batch_size=100):
         results = []
         for i in range(0, len(spans), batch_size):
-            results.extend(embed_func(spans[i:i+batch_size]))
+            batch_spans = spans[i:i+batch_size]
+            # 임베딩 계산을 위해 정규화
+            normalized_batch = [_normalize_for_embedding(span) for span in batch_spans]
+            results.extend(embed_func(normalized_batch))
         return results
     span_embs = batch_embed(all_spans)
 
@@ -313,8 +346,12 @@ def split_tgt_by_src_units_semantic(
             for k in range((i-1)*min_tokens, j-min_tokens+1):
                 span = span_map[(k, j)]
                 tgt_emb = span_emb_dict[span]
+                # 기본 의미 유사성 점수
                 sim = float(np.dot(src_embs[i-1], tgt_emb)/((np.linalg.norm(src_embs[i-1])*np.linalg.norm(tgt_emb))+1e-8))
-                score = dp[i-1, k] + sim
+                # 문법적 경계 보너스 추가
+                grammar_bonus = _calculate_grammar_bonus(span)
+                final_score = sim + grammar_bonus
+                score = dp[i-1, k] + final_score
                 if score > dp[i, j]:
                     dp[i, j] = score
                     back[i, j] = k
@@ -394,3 +431,31 @@ def sentence_split(text):
     """문장 단위로 분리"""
     sentences = re.split(r'[.!?。！？]+', text)
     return [s.strip() for s in sentences if s.strip()]
+
+def normalize_for_embedding(text: str) -> str:
+    """임베딩 계산을 위해 텍스트 정규화 - 전각 콜론 등 구두점 제거"""
+    # 전각 콜론과 괄호 등을 제거하여 의미 매칭에 집중
+    normalized = text.replace('：', '').replace('(', '').replace(')', '')
+    # 연속된 공백을 하나로 정리
+    normalized = ' '.join(normalized.split())
+    return normalized
+
+def _normalize_for_embedding(text: str) -> str:
+    """임베딩 계산을 위한 텍스트 정규화 - 전각 콜론 제거"""
+    return text.replace('：', '').strip()
+
+def _calculate_grammar_bonus(span: str) -> float:
+    """문법적 경계에 대한 보너스 점수 계산"""
+    span = span.strip()
+    
+    # 주요 어미로 끝나는 경우 보너스
+    grammar_endings = ['는', '가', '을', '를', '에', '로', '면', '다', '라', '니', '요']
+    for ending in grammar_endings:
+        if span.endswith(ending):
+            return 0.3  # 문법 보너스
+    
+    # 전각 콜론으로 끝나는 경우 강한 보너스
+    if span.endswith('：'):
+        return 0.5  # 강한 문법 보너스
+        
+    return 0.0

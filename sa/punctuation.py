@@ -3,6 +3,7 @@
 import logging
 import regex  # 🆕 유니코드 속성 정규식
 import re  # 괄호 추출 및 패턴 컴파일용
+import numpy as np  # 임베딩 계산용
 from typing import List, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,6 @@ def extract_punctuation_with_han(text: str) -> Tuple[List[str], List[int]]:
     """한자/한글 구두점 경계 추출 (전각 콜론 등 경계 강화, 기존 기능 보존)"""
     # 1. 반각 종결부호+공백 기준 분할(따옴표 문제 방지)
     # 2. 전각 콜론(：)은 공백 없이도 경계로 처리
-    import regex
     result = []
     positions = []
     # 1단계: 반각 종결부호+공백 기준 분할
@@ -115,8 +115,8 @@ def extract_punctuation_with_han(text: str) -> Tuple[List[str], List[int]]:
     return result, positions
 
 def is_han_punctuation(char: str) -> bool:
-    """한자 구두점 여부"""
-    han_punctuation = ['。', '！', '？', '，', '：', '；']
+    """한자 구두점 여부 - 전각 콜론은 분할 경계로 사용하므로 제외"""
+    han_punctuation = ['。', '！', '？', '，', '；']  # '：' 제거
     return char in han_punctuation
 
 def is_hangul_boundary(text: str, pos: int) -> bool:
@@ -127,18 +127,24 @@ def is_hangul_boundary(text: str, pos: int) -> bool:
     return bool(regex.match(r'\p{Hangul}', text[pos]))
 
 def process_punctuation(alignments: List[Dict[str, Any]], src_units: List[str], tgt_units: List[str]) -> List[Dict[str, Any]]:
-    """괄호 및 구두점 처리 - processor.py 호환용"""
+    """괄호 및 구두점 처리 - processor.py 호환용
+    
+    정렬된 원문-번역문 쌍들을 받아서 괄호 매칭 정보를 추가하는 후처리 함수
+    
+    Args:
+        alignments: 정렬 결과 리스트 [{'src_idx': int, 'tgt_idx': int, 'src': str, 'tgt': str, 'score': float}]
+        src_units: 원문 의미 단위 리스트 (현재 미사용)
+        tgt_units: 번역문 의미 단위 리스트 (현재 미사용)
+    
+    Returns:
+        괄호 매칭 정보가 추가된 정렬 결과 리스트
+    """
     
     if not alignments:
         return alignments
     
-    try:
-        # 기존 함수가 있다면 그것을 활용, 없다면 기본 처리
-        return process_bracket_alignments(alignments, src_units, tgt_units)
-    except NameError:
-        # process_bracket_alignments 함수가 없다면 기본 반환
-        logger.warning("⚠️ process_bracket_alignments 함수가 없습니다. 기본 처리합니다.")
-        return alignments
+    # 괄호 매칭 분석을 통해 정렬 결과에 메타데이터 추가
+    return process_bracket_alignments(alignments, src_units, tgt_units)
 
 def process_bracket_alignments(alignments: List[Dict[str, Any]], src_units: List[str], tgt_units: List[str]) -> List[Dict[str, Any]]:
     """괄호 정렬 처리"""
@@ -192,6 +198,13 @@ def extract_brackets(text: str) -> List[str]:
 
 # 별칭 함수 (하위 호환성)
 restore_masks = restore_brackets
+
+# 모듈 export 함수 목록
+__all__ = [
+    'mask_brackets',
+    'restore_brackets', 
+    'process_punctuation'
+]
 
 if __name__ == "__main__":
     # 테스트

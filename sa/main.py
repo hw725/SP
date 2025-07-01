@@ -82,13 +82,14 @@ def process_single_file(
         if parallel:
             print("⚡ 병렬 처리 모드로 실행합니다.")
             from io_manager import process_file as io_process_file
-            # 병렬 처리 함수 호출
+            # 병렬 처리 함수 호출 - embedder_name 전달
             results_df = io_process_file(
                 input_file,
                 output_file,
                 parallel=True,
                 workers=4,
-                batch_size=20
+                batch_size=20,
+                embedder_name=embedder_name
             )
             if results_df is not None:
                 print(f"🎉 병렬 처리 완료! 결과: {len(results_df)}개 구")

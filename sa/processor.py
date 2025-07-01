@@ -3,6 +3,8 @@
 import logging
 import pandas as pd
 import numpy as np
+import time
+import traceback  # 에러 추적용
 from typing import Dict, List, Any, Optional, Tuple
 from tqdm import tqdm  # 진행률 표시 추가
 from io_utils import load_excel_file as load_excel, save_alignment_results as save_excel
@@ -35,8 +37,6 @@ except ImportError as e:
     def align_tokens(*args, **kwargs):
         logging.error("\u274c 정렬 기능을 사용할 수 없습니다.")
         return []
-
-import time
 
 # punctuation import 안전 처리
 try:

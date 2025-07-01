@@ -77,7 +77,7 @@ def _get_openai_client():
 
 def compute_embeddings_batch(
     texts: List[str], 
-    model: str = "text-embedding-3-small",
+    model: str = "text-embedding-3-large",  # 또는 "text-embedding-3-small", "text-embedding-ada-002"
     max_batch_size: int = 100
 ) -> List[np.ndarray]:
     """OpenAI API로 배치 임베딩 생성"""
@@ -116,7 +116,7 @@ def compute_embeddings_batch(
 
 def compute_embeddings_with_cache(
     texts: Union[str, List[str]], 
-    model: str = "text-embedding-3-large",
+    model: str = "text-embedding-3-large",  # 또는 "text-embedding-3-small", "text-embedding-ada-002"
     use_cache: bool = True,
     api_key: Optional[str] = None
 ) -> Union[np.ndarray, List[np.ndarray]]:
@@ -210,18 +210,18 @@ def compute_embeddings_with_cache(
     else:
         return all_embeddings
 
-def get_embedding_dimension(model: str = "text-embedding-3-small") -> int:
+def get_embedding_dimension(model: str = "text-embedding-3-large") -> int:  # 또는 "text-embedding-3-small", "text-embedding-ada-002"
     """임베딩 차원 반환"""
     
     dimension_map = {
         "text-embedding-3-small": 1536,
         "text-embedding-3-large": 3072,
-        "text-embedding-ada-002": 1536
+        "text-embedding-ada-002": 1536  # 이전 세대 모델 (호환성용)
     }
     
-    return dimension_map.get(model, 1536)
+    return dimension_map.get(model, 3072)
 
-def test_openai_connection(model: str = "text-embedding-3-small") -> bool:
+def test_openai_connection(model: str = "text-embedding-3-large") -> bool:  # 또는 "text-embedding-3-small", "text-embedding-ada-002"
     """OpenAI 연결 테스트"""
     
     try:

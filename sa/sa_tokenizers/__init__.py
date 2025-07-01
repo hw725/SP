@@ -5,7 +5,8 @@ from .jieba_mecab import (
     tokenize_text,
     pos_tag_text,
     sentence_split,
-    split_tgt_by_src_units_semantic
+    split_tgt_by_src_units_semantic,
+    split_tgt_by_src_units  # 단순 분할 함수 추가
 )
 from .bert_tokenizer import split_src_meaning_units as bert_split_src_meaning_units, split_src_sentences as bert_split_src_sentences
 
@@ -16,8 +17,9 @@ def split_src_meaning_units(text: str, *args, **kwargs):
 
 __all__ = [
     'split_src_meaning_units',
-    'split_tgt_meaning_units',
+    'split_tgt_meaning_units', 
     'split_tgt_by_src_units_semantic',
+    'split_tgt_by_src_units',
     'tokenize_text',
     'pos_tag_text',
     'sentence_split'
