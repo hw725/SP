@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import regex
 import re
+import itertools
 from typing import List, Callable
 import jieba
 import MeCab
@@ -114,30 +115,6 @@ def split_inside_chunk(chunk: str) -> List[str]:
     if not chunk or not chunk.strip():
         return []
     
-    # 특별한 패턴들을 먼저 처리 - 복합 구문은 하나의 단위로 유지
-    # 1. "'사물에 이른다.［격물(格物)］' 라는 것은" 같은 복합 따옴표+괄호 구문
-    if "' 라는 것은" in chunk or "］' 라는 것은" in chunk:
-        return [chunk.strip()]
-    
-    # 2. "격물치지(格物致知)라는 것은" 같은 주석 포함 구문
-    if "라는 것은" in chunk and ('(' in chunk and ')' in chunk):
-        return [chunk.strip()]
-    
-    # 3. "'사물에 이른다.［격물(格物)］'라는" 패턴 (조사 변형)
-    if ("'라는" in chunk or "］'라는" in chunk) and ('［' in chunk and '］' in chunk):
-        return [chunk.strip()]
-    
-    # 4. 긴 복합 구문들을 하나로 유지
-    complex_patterns = [
-        "'사물에 이른다.［격물(格物)］' 라는 것은",
-        "성의라는 것은",
-        "마음을 바르게 하는 것이다"
-    ]
-    
-    for pattern in complex_patterns:
-        if pattern in chunk:
-            return [chunk.strip()]
-    
     # 1단계: 어절 단위로 분리 (어절 내부는 절대 쪼개지지 않음)
     # 전각 콜론 뒤에만 공백을 추가하여 "전운(箋云)：" + "갈대는" 형태로 분할
     words = chunk.replace('：', '： ').split()
@@ -182,18 +159,43 @@ def split_inside_chunk(chunk: str) -> List[str]:
     return [unit.strip() for unit in units if unit.strip()]
 
 def _should_break_by_mecab(word: str, morpheme_info: List[tuple]) -> bool:
-    """MeCab 분석 결과를 참고해서 의미 단위 경계 결정"""
+    """MeCab 분석 결과를 참고해서 의미 단위 경계 결정 - 보조사(JX) 강화"""
     
     # word에 해당하는 형태소들의 품사 확인 - 정확한 매칭
     for surface, pos in morpheme_info:
         # 단어가 해당 형태소로 끝나는지 확인 (더 정확한 매칭)
         if word.endswith(surface):
-            # 조사, 어미, 구두점에서 경계 (JKB 부사격조사 추가)
-            if pos in ['JKS', 'JKO', 'JKC', 'JKB', 'JX', 'EF', 'EC', 'ETN', 'SF', 'SP']:
+            # 1. 강한 경계 신호 - 종결어미, 구두점
+            if pos in ['EF', 'SF', 'SP']:
                 return True
-            # 동사, 형용사 어간 다음에서 경계  
+            
+            # 2. 보조사(JX) - 매우 중요한 문법적 표지로 강화 처리
+            if pos == 'JX':
+                return True  # 모든 보조사에서 분할
+            
+            # 3. 주요 조사들 - 의미 단위 경계
+            if pos in ['JKS', 'JKO', 'JKC', 'JKB', 'JKG', 'JKV', 'JKQ']:
+                return True  # 모든 조사에서 분할
+            
+            # 4. 연결어미(EC) - 문장 연결
+            if pos == 'EC':
+                return True  # 모든 연결어미에서 분할
+            
+            # 5. 명사형 전성어미(ETN) - 명사화
+            if pos == 'ETN':
+                return True
+            
+            # 6. 관형형 전성어미(ETM) - 관형어화
+            if pos == 'ETM':
+                return True
+            
+            # 7. 동사, 형용사 어간 다음에서 경계  
             if pos in ['VV', 'VA', 'VX']:
-                return True
+                return len(surface) >= 1  # 길이 1 이상인 용언 어간에서 분할
+            
+            # 8. 중요한 부사에서 분할 (MAG, MAJ)
+            if pos in ['MAG', 'MAJ'] and len(surface) >= 2:
+                return True  # 길이 2 이상인 부사에서 분할
     
     return False
 
@@ -734,7 +736,7 @@ def _normalize_for_embedding(text: str) -> str:
     return text.replace('：', '').strip()
 
 def _calculate_grammar_bonus(span: str) -> float:
-    """문법적 경계에 대한 보너스 점수 계산 - 개선된 버전"""
+    """문법적 경계에 대한 보너스 점수 계산 - MeCab 기반 간소화 버전"""
     span = span.strip()
     bonus = 0.0
     
@@ -742,30 +744,8 @@ def _calculate_grammar_bonus(span: str) -> float:
     if span.endswith('：'):
         return 0.8  # 매우 강한 문법 보너스
     
-    # 2. 주요 어미로 끝나는 경우 보너스
-    strong_endings = ['다', '라', '요', '까', '냐']  # 문장 종결어미
-    medium_endings = ['는', '가', '을', '를', '에', '로', '면', '니']  # 조사/연결어미
-    weak_endings = ['고', '지', '며', '서', '게', '도', '만', '뿐']  # 보조사/연결어미
-    
-    for ending in strong_endings:
-        if span.endswith(ending):
-            bonus += 0.5  # 강한 문법 보너스
-            break
-    
-    if bonus == 0:  # 강한 어미가 없는 경우에만
-        for ending in medium_endings:
-            if span.endswith(ending):
-                bonus += 0.3  # 중간 문법 보너스
-                break
-    
-    if bonus == 0:  # 강한/중간 어미가 없는 경우에만
-        for ending in weak_endings:
-            if span.endswith(ending):
-                bonus += 0.1  # 약한 문법 보너스
-                break
-    
-    # 3. MeCab을 이용한 정확한 어미 분석
-    if mecab and bonus < 0.3:  # 기존 규칙으로 보너스가 낮은 경우
+    # 2. MeCab을 이용한 정확한 어미/조사 분석에만 의존
+    if mecab:
         try:
             result = mecab.parse(span)
             last_pos = None
@@ -774,21 +754,27 @@ def _calculate_grammar_bonus(span: str) -> float:
                     parts = line.split('\t')
                     if len(parts) >= 2:
                         pos_detail = parts[1].split(',')
-                        if pos_detail[0] in ['EF', 'EC', 'JKS', 'JKO', 'JKB']:  # 어미, 조사
-                            last_pos = pos_detail[0]
+                        last_pos = pos_detail[0]
             
+            # 품사별 보너스
             if last_pos == 'EF':  # 종결어미
-                bonus = max(bonus, 0.4)
-            elif last_pos in ['EC', 'JKS', 'JKO', 'JKB']:  # 연결어미, 조사
-                bonus = max(bonus, 0.2)
+                bonus = 0.5
+            elif last_pos == 'EC':  # 연결어미
+                bonus = 0.4
+            elif last_pos == 'JX':  # 보조사
+                bonus = 0.4
+            elif last_pos in ['JKS', 'JKO', 'JKB', 'JKC']:  # 주요 조사
+                bonus = 0.3
+            elif last_pos in ['ETN', 'ETM']:  # 전성어미
+                bonus = 0.3
         except:
             pass  # MeCab 오류 무시
     
-    # 4. 구두점으로 끝나는 경우
+    # 3. 구두점으로 끝나는 경우
     if span.endswith(('.', '。', '!', '！', '?', '？')):
-        bonus += 0.3
+        bonus = max(bonus, 0.4)
     elif span.endswith((',', '，', ';', '；')):
-        bonus += 0.2
+        bonus = max(bonus, 0.2)
         
     return min(bonus, 1.0)  # 최대 보너스 제한
 
