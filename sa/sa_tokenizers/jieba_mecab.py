@@ -394,162 +394,45 @@ def _find_optimal_semantic_matching(src_units: List[str], tgt_chunks: List[str],
         return tgt_chunks
 
 def _calculate_keyword_bonus(src_unit: str, tgt_chunk: str) -> float:
-    """키워드 매칭 보너스 계산 - 의미 기반 매칭 개선 (최신 버전)"""
+    """키워드 매칭 보너스 계산 - 단순화된 버전"""
     bonus = 0.0
-    matches_found = []  # 디버깅용 매칭 기록
     
-    # 1. 한자 추출 (개별 및 복합)
+    # 1. 한자 추출
     src_hanja = regex.findall(r'\p{Han}+', src_unit)
-    exact_hanja_matches = 0
     
     # 2. 한자 직접 매칭
     for hanja in src_hanja:
         if hanja in tgt_chunk:
-            exact_hanja_matches += 1
-            bonus += 0.5  # 한자 직접 매칭 (증가)
-            matches_found.append(f"한자직접:{hanja}")
+            bonus += 0.5  # 한자 직접 매칭
             if len(hanja) >= 2:
-                bonus += 0.3  # 긴 한자어 보너스 (증가)
+                bonus += 0.2  # 긴 한자어 보너스
     
-    # 3. 확장된 한자-한글 매칭 사전 (개별 및 복합)
-    enhanced_hanja_to_hangul = {
-        # 핵심 복합어 (높은 우선순위)
-        '格物': ['격물', '사물', '이치', '사물에 이른다'],
-        '致知': ['치지', '지식', '앎', '알'],
-        '誠意': ['성의', '성실', '진실'],
-        '正心': ['정심', '마음', '정신', '마음을 바르게'],
-        '修身': ['수신', '몸', '수양'],
-        '齊家': ['제가', '가정', '집안'],
-        '治國': ['치국', '나라', '정치'],
-        '平天下': ['평천하', '천하', '세상'],
-        
-        # 개별 한자 (복합어 매칭 실패시)
-        '格': ['격', '사물', '이치'], '物': ['물', '사물', '것'],
-        '致': ['치', '이르', '달'], '知': ['지', '알', '앎'],
-        '誠': ['성', '성실', '진실'], '意': ['의', '뜻', '마음'],
-        '正': ['정', '바르', '올바'], '心': ['심', '마음', '정신'],
-        '修': ['수', '닦', '수양'], '身': ['신', '몸', '자신'],
-        '齊': ['제', '가지런'], '家': ['가', '집', '가정'],
-        '治': ['치', '다스', '정치'], '國': ['국', '나라'],
-        '平': ['평', '평평'], '天下': ['천하', '세상'],
-        '者': ['자', '것', '라는 것'], '也': ['야', '이다', '다']
-    }
+    # 3. 기본적인 문법 표지 매칭만 유지
+    if '者' in src_unit and any(marker in tgt_chunk for marker in ['것', '자', '라는']):
+        bonus += 0.3
     
-    phonetic_matches = 0
+    if '也' in src_unit and any(marker in tgt_chunk for marker in ['다', '이다', '것이다']):
+        bonus += 0.3
     
-    # 복합어 우선 매칭 (다중 키워드 지원)
-    for hanja in src_hanja:
-        if hanja in enhanced_hanja_to_hangul:
-            keywords = enhanced_hanja_to_hangul[hanja]
-            for keyword in keywords:
-                if keyword in tgt_chunk:
-                    phonetic_matches += 1
-                    # 첫 번째 키워드(직접 음독)는 높은 점수, 의미어는 중간 점수
-                    if keyword == keywords[0]:
-                        bonus += 0.4  # 직접 음독 (증가)
-                    else:
-                        bonus += 0.3  # 의미 매칭 (증가)
-                    matches_found.append(f"복합:{hanja}→{keyword}")
-                    break
-    
-    # 4. 확장된 의미 키워드 매칭
-    extended_semantic_mappings = {
-        # 문맥적 의미 확장 (더 구체적)
-        '格物': ['이른다', '궁구', '사물의 이치', '사물에 이른다'],
-        '致知': ['지식을 얻', '앎에 이르', '알게'],
-        '誠意': ['성의를 다', '진실', '성실', '성의라는'],
-        '正心': ['마음을 바르게', '정신을 바로', '마음을 다스', '바르게 하는'],
-        '修身': ['몸을 닦', '자신을 수양', '인격을 기르'],
-        '齊家': ['가정을 다스', '집안을 바로'],
-        '者': ['라는 것', '것', '자', '하는 사람', '라는 것은'],
-        '也': ['것이다', '하는 것이다', '이다', '다']
-    }
-    
-    semantic_matches = 0
-    for hanja in src_hanja:
-        if hanja in extended_semantic_mappings:
-            for semantic_phrase in extended_semantic_mappings[hanja]:
-                if semantic_phrase in tgt_chunk:
-                    semantic_matches += 1
-                    bonus += 0.35  # 확장 의미 매칭 (증가)
-                    matches_found.append(f"확장의미:{hanja}→{semantic_phrase}")
-                    break
-    
-    # 5. 강화된 문법적 대응 (조사/어미)
-    enhanced_grammar_mappings = {
-        '은': ['는', '것은', '라는 것은', '이란', '라는'],
-        '는': ['은', '것은', '라는 것은', '이란'],
-        '者': ['자', '것', '라는 것', '하는 것', '라는', '라는 것은'],
-        '也': ['이다', '다', '것이다', '하는 것이다', '인 것이다']
-    }
-    
-    grammar_matches = 0
-    for ending, targets in enhanced_grammar_mappings.items():
-        if src_unit.endswith(ending) or ending in src_unit:
-            for target in targets:
-                if target in tgt_chunk:
-                    grammar_matches += 1
-                    bonus += 0.25  # 문법 매칭 점수 (증가)
-                    matches_found.append(f"문법:{ending}→{target}")
-                    break
-    
-    # 6. 특수 복합 구문 패턴 매칭 (테스트에서 성공한 패턴들)
-    special_patterns = [
-        # (원문패턴, 번역패턴, 보너스)
-        ('格物은', '사물에 이른다', 0.6),
-        ('格物은', '라는 것은', 0.5),
-        ('誠意者', '성의라는', 0.6),
-        ('正心也', '마음을 바르게', 0.6),
-        ('正心也', '하는 것이다', 0.5),
-        ('者', '라는 것', 0.4),
-        ('也', '것이다', 0.4)
-    ]
-    
-    for src_pattern, tgt_pattern, pattern_bonus in special_patterns:
-        if src_pattern in src_unit and tgt_pattern in tgt_chunk:
-            bonus += pattern_bonus
-            matches_found.append(f"특수패턴:{src_pattern}→{tgt_pattern}")
-    
-    # 7. 축약된 페널티 시스템 (더 관대하게)
-    penalty = 0.0
-    
-    # 매칭이 전혀 없는 경우만 작은 페널티
-    total_matches = exact_hanja_matches + phonetic_matches + semantic_matches + grammar_matches
-    if total_matches == 0 and len(src_hanja) > 0:
-        penalty += 0.1  # 페널티 완화
-    
-    final_bonus = max(0.0, bonus - penalty)
-    
-    # 디버깅 정보 (선택적)
-    if matches_found and logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"매칭 '{src_unit}' → '{tgt_chunk}': {matches_found} = {final_bonus:.3f}")
-    
-    return min(final_bonus, 2.5)  # 최대값을 2.5로 증가
+    return min(bonus, 1.5)  # 최대값 제한
 
 
 def _calculate_structure_bonus(src_unit: str, tgt_chunk: str) -> float:
-    """구문 구조 매칭 보너스 계산"""
+    """구문 구조 매칭 보너스 계산 - 단순화된 버전"""
     bonus = 0.0
     
-    # 1. 구두점 패턴 매칭
+    # 1. 구두점 수 매칭만 유지
     src_punct = len(re.findall(r'[,，.。!！?？:：;；]', src_unit))
     tgt_punct = len(re.findall(r'[,，.。!！?？:：;；]', tgt_chunk))
     
     if src_punct == tgt_punct and src_punct > 0:
-        bonus += 0.3  # 구두점 수가 일치하는 경우
+        bonus += 0.2
     
     # 2. 괄호 구조 매칭
     src_parens = src_unit.count('(') + src_unit.count('（')
     tgt_parens = tgt_chunk.count('(') + tgt_chunk.count('（')
     
     if src_parens == tgt_parens and src_parens > 0:
-        bonus += 0.2  # 괄호 수가 일치하는 경우
-    
-    # 3. 문장 종결 패턴 매칭
-    src_ends = any(src_unit.strip().endswith(end) for end in ['다', '라', '요', '니', '까'])
-    tgt_ends = any(tgt_chunk.strip().endswith(end) for end in ['다', '라', '요', '니', '까'])
-    
-    if src_ends == tgt_ends:
         bonus += 0.1
     
     return bonus
@@ -736,15 +619,15 @@ def _normalize_for_embedding(text: str) -> str:
     return text.replace('：', '').strip()
 
 def _calculate_grammar_bonus(span: str) -> float:
-    """문법적 경계에 대한 보너스 점수 계산 - MeCab 기반 간소화 버전"""
+    """문법적 경계에 대한 보너스 점수 계산 - MeCab 기반 단순화 버전"""
     span = span.strip()
     bonus = 0.0
     
     # 1. 전각 콜론으로 끝나는 경우 강한 보너스
     if span.endswith('：'):
-        return 0.8  # 매우 강한 문법 보너스
+        return 0.8
     
-    # 2. MeCab을 이용한 정확한 어미/조사 분석에만 의존
+    # 2. MeCab을 이용한 정확한 어미/조사 분석
     if mecab:
         try:
             result = mecab.parse(span)
@@ -756,7 +639,7 @@ def _calculate_grammar_bonus(span: str) -> float:
                         pos_detail = parts[1].split(',')
                         last_pos = pos_detail[0]
             
-            # 품사별 보너스
+            # 품사별 보너스 - 단순화
             if last_pos == 'EF':  # 종결어미
                 bonus = 0.5
             elif last_pos == 'EC':  # 연결어미
@@ -768,15 +651,15 @@ def _calculate_grammar_bonus(span: str) -> float:
             elif last_pos in ['ETN', 'ETM']:  # 전성어미
                 bonus = 0.3
         except:
-            pass  # MeCab 오류 무시
+            pass
     
-    # 3. 구두점으로 끝나는 경우
+    # 3. 기본 구두점 처리
     if span.endswith(('.', '。', '!', '！', '?', '？')):
         bonus = max(bonus, 0.4)
     elif span.endswith((',', '，', ';', '；')):
         bonus = max(bonus, 0.2)
         
-    return min(bonus, 1.0)  # 최대 보너스 제한
+    return min(bonus, 1.0)
 
 def _split_single_target_to_multiple(src_units: List[str], single_tgt: str, embed_func: Callable) -> List[str]:
     """단일 번역문을 여러 원문 단위에 맞게 분할"""
@@ -794,32 +677,25 @@ def _split_single_target_to_multiple(src_units: List[str], single_tgt: str, embe
         return _force_split_by_semantic_boundaries(src_units, single_tgt, embed_func)
 
 def _merge_splits_to_match_src_count(src_units: List[str], tgt_splits: List[str], embed_func: Callable) -> List[str]:
-    """번역문 분할을 원문 개수에 맞게 병합"""
+    """번역문 분할을 원문 개수에 맞게 병합 - 단순화된 버전"""
     if len(src_units) >= len(tgt_splits):
         return tgt_splits
     
-    # 너무 많이 split된 경우 일부를 병합
-    # 가장 유사도가 높은 인접한 분할들을 병합
+    # 너무 많이 split된 경우 앞에서부터 순차적으로 병합
     current_splits = tgt_splits[:]
     
     while len(current_splits) > len(src_units):
-        # 인접한 분할들 중 가장 적합한 병합 후보 찾기
+        # 가장 짧은 인접한 두 분할을 병합
         best_merge_idx = 0
-        best_score = -1
+        min_combined_length = float('inf')
         
         for i in range(len(current_splits) - 1):
-            merged = current_splits[i] + ' ' + current_splits[i + 1]
-            # 병합된 텍스트가 어떤 원문과 가장 잘 매칭되는지 확인
-            best_src_score = 0
-            for src in src_units:
-                score = _calculate_keyword_bonus(src, merged)
-                best_src_score = max(best_src_score, score)
-            
-            if best_src_score > best_score:
-                best_score = best_src_score
+            combined_length = len(current_splits[i]) + len(current_splits[i + 1])
+            if combined_length < min_combined_length:
+                min_combined_length = combined_length
                 best_merge_idx = i
         
-        # 최적 위치에서 병합
+        # 병합 실행
         merged_text = current_splits[best_merge_idx] + ' ' + current_splits[best_merge_idx + 1]
         current_splits = (current_splits[:best_merge_idx] + 
                          [merged_text] + 
@@ -828,50 +704,32 @@ def _merge_splits_to_match_src_count(src_units: List[str], tgt_splits: List[str]
     return current_splits
 
 def _force_split_by_semantic_boundaries(src_units: List[str], single_tgt: str, embed_func: Callable) -> List[str]:
-    """의미적 경계를 기준으로 강제 분할"""
-    # 문장을 토큰 단위로 분할하고 원문과의 유사도를 기반으로 경계 결정
+    """의미적 경계를 기준으로 강제 분할 - 단순화된 버전"""
     tokens = single_tgt.split()
     if len(tokens) <= len(src_units):
         return [single_tgt]  # 토큰이 부족하면 그대로 반환
     
-    # 각 토큰 위치에서의 누적 텍스트와 원문들의 유사도 계산하여 최적 분할점 찾기
-    boundaries = [0]
-    src_idx = 0
+    # 단순하게 토큰을 거의 균등하게 분할
+    tokens_per_unit = len(tokens) // len(src_units)
+    remainder = len(tokens) % len(src_units)
     
-    for i in range(1, len(tokens)):
-        if src_idx >= len(src_units) - 1:
-            break
-            
-        # 현재까지의 텍스트
-        current_text = ' '.join(tokens[boundaries[-1]:i+1])
-        # 다음 텍스트 미리보기
-        next_text = ' '.join(tokens[i+1:min(i+10, len(tokens))])
-        
-        # 현재 원문과의 매칭 점수
-        current_score = _calculate_keyword_bonus(src_units[src_idx], current_text)
-        
-        # 다음 원문과의 매칭 점수 (있다면)
-        next_score = 0
-        if src_idx + 1 < len(src_units) and next_text:
-            next_score = _calculate_keyword_bonus(src_units[src_idx + 1], next_text)
-        
-        # 경계 결정: 다음 원문과의 매칭이 더 좋고, 현재 텍스트가 충분히 긴 경우
-        if (next_score > current_score * 0.7 and 
-            len(current_text.strip()) >= 3 and 
-            i - boundaries[-1] >= 2):
-            boundaries.append(i)
-            src_idx += 1
-    
-    boundaries.append(len(tokens))
-    
-    # 경계를 기준으로 분할
     result = []
-    for i in range(len(boundaries) - 1):
-        start, end = boundaries[i], boundaries[i + 1]
+    start = 0
+    
+    for i in range(len(src_units)):
+        # 나머지가 있으면 앞쪽 단위들에 하나씩 더 배분
+        current_size = tokens_per_unit + (1 if i < remainder else 0)
+        end = start + current_size
+        
+        if end > len(tokens):
+            end = len(tokens)
+        
         if start < end:
             segment = ' '.join(tokens[start:end]).strip()
             if segment:
                 result.append(segment)
+        
+        start = end
     
     # 결과가 부족하면 마지막 것을 반환
     if not result:
