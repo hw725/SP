@@ -55,13 +55,14 @@ def init_worker(device_id=None, embedder_name='bge'):
                 print(f"워커 {mp.current_process().pid}: BGE 임베더 초기화 완료")
         
         # 필요한 모듈들 임포트
-        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units, split_tgt_by_src_units_semantic
+        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units, split_tgt_by_src_units_semantic, split_tgt_meaning_units_sequential
         from punctuation import mask_brackets, restore_brackets
         
         worker_modules = {
             'split_src_meaning_units': split_src_meaning_units,
             'split_tgt_meaning_units': split_tgt_meaning_units,
             'split_tgt_by_src_units_semantic': split_tgt_by_src_units_semantic,
+            'split_tgt_meaning_units_sequential': split_tgt_meaning_units_sequential,
             'mask_brackets': mask_brackets,
             'restore_brackets': restore_brackets
         }
@@ -97,17 +98,19 @@ def process_batch_sentences(sentence_batch: List[Dict[str, Any]], device_id=None
             restore_brackets = worker_modules['restore_brackets']
             split_src_meaning_units = worker_modules['split_src_meaning_units']
             split_tgt_by_src_units_semantic = worker_modules['split_tgt_by_src_units_semantic']
+            split_tgt_meaning_units_sequential = worker_modules['split_tgt_meaning_units_sequential']
             
             # 처리 파이프라인
             masked_src, src_masks = mask_brackets(src_text, 'source')
             masked_tgt, tgt_masks = mask_brackets(tgt_text, 'target')
             
             src_units = split_src_meaning_units(masked_src)
-            tgt_units = split_tgt_by_src_units_semantic(
-                src_units, 
+            # 🆕 의미 기반 순차 분할 (임베딩 함수 전달)
+            tgt_units = split_tgt_meaning_units_sequential(
+                masked_src,  # 원문도 전달
                 masked_tgt, 
-                worker_embed_func, 
-                min_tokens=1
+                min_tokens=1,
+                embed_func=worker_embed_func  # 임베딩 함수 전달
             )
             
             # 결과 생성
@@ -259,7 +262,7 @@ def process_file(input_path: str, output_path: str, parallel: bool = False, work
         print(f"✅ 모델 로딩 완료! 문장 처리를 시작합니다...")
         logger.info("✅ 모델 로딩 완료, 순차 처리 시작")
         
-        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_by_src_units_semantic
+        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_by_src_units_semantic, split_tgt_meaning_units_sequential
         from punctuation import mask_brackets, restore_brackets
         
         for sentence_data in tqdm(sentence_data_list, desc="문장 처리"):
