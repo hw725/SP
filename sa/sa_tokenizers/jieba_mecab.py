@@ -379,20 +379,11 @@ def find_target_span_end_simple(src_unit: str, remaining_tgt: str) -> int:
 
 # [REMOVED] find_target_span_end_semantic - 더 이상 사용되지 않음
 
+# [DEPRECATED] 이 함수는 split_tgt_by_src_units_semantic으로 대체됨  
 def split_tgt_by_src_units(src_units: List[str], tgt_text: str) -> List[str]:
-    """원문 단위에 따른 번역문 분할 (단순 방식)"""
-    results = []
-    cursor = 0
-    total = len(tgt_text)
-    for src_u in src_units:
-        remaining = tgt_text[cursor:]
-        end_len = find_target_span_end_simple(src_u, remaining)
-        chunk = tgt_text[cursor:cursor+end_len]
-        results.extend(split_inside_chunk(chunk))
-        cursor += end_len
-    if cursor < total:
-        results.extend(split_inside_chunk(tgt_text[cursor:]))
-    return results
+    """원문 단위에 따른 번역문 분할 (단순 방식) - DEPRECATED"""
+    logger.warning("split_tgt_by_src_units는 deprecated됩니다. split_tgt_by_src_units_semantic을 사용하세요.")
+    return split_tgt_by_src_units_semantic(src_units, tgt_text, None, DEFAULT_MIN_TOKENS)
 
 def split_tgt_by_src_units_semantic(
     src_units: List[str], 
@@ -431,30 +422,19 @@ def split_tgt_by_src_units_semantic(
 # - _calculate_length_balance_bonus
 # - _dp_semantic_matching
 
+# [DEPRECATED] 이 함수는 split_tgt_meaning_units_sequential로 대체됨
 def split_tgt_meaning_units(
     src_text: str,
     tgt_text: str,
-    use_semantic: bool = False,  # 기본값을 False로 변경 (순차 모드 우선)
+    use_semantic: bool = False,  
     min_tokens: int = DEFAULT_MIN_TOKENS,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     embed_func: Callable = None
 ) -> List[str]:
-    """번역문을 의미 단위로 분할 - 순차 방식 우선"""
-    
-    # 기본적으로 순차 분할 사용 (순서 보장)
-    if not use_semantic:
-        return split_tgt_meaning_units_sequential(
-            src_text, tgt_text, min_tokens, max_tokens
-        )
-    
-    # 기존 의미 기반 방식 (하위 호환용)
-    if embed_func is None:
-        from sa_embedders import compute_embeddings_with_cache
-        embed_func = compute_embeddings_with_cache
-        
-    src_units = split_src_meaning_units(src_text, min_tokens, max_tokens)
-    return split_tgt_by_src_units_semantic(
-        src_units, tgt_text, embed_func=embed_func, min_tokens=min_tokens
+    """번역문을 의미 단위로 분할 - DEPRECATED: split_tgt_meaning_units_sequential 사용 권장"""
+    logger.warning("split_tgt_meaning_units는 deprecated됩니다. split_tgt_meaning_units_sequential을 사용하세요.")
+    return split_tgt_meaning_units_sequential(
+        src_text, tgt_text, min_tokens, max_tokens, embed_func
     )
 
 def tokenize_text(text):
@@ -545,9 +525,23 @@ def _calculate_grammar_bonus(span: str) -> float:
 # - _force_split_by_semantic_boundaries
 
 def _should_break_by_mecab_src(word: str, morpheme_info: List[tuple]) -> bool:
-    """원문용 - MeCab 분석 결과 + 중세국어 어미 패턴으로 의미 단위 경계 결정"""
+    """원문용 - MeCab 분석 결과 + 중세국어 어미 패턴 + JX 보조사로 의미 단위 경계 결정"""
     
-    # 1. 중세국어 어미 패턴 확인 (원문에만 적용)
+    # 1. 한문 JX 보조사 확인 (강력한 분할 신호)
+    # JX 보조사들은 일반적으로 의미 단위의 끝을 나타냄
+    jx_markers = ['之', '其', '者', '所', '以', '於', '而', '則', '故', '乃', '且', '若', '如', '與']
+    for marker in jx_markers:
+        if marker in word:
+            # JX 보조사가 포함되면 분할 신호
+            return True
+    
+    # 2. 문말 표지 확인 (문장/구 종결)
+    final_markers = ['也', '矣', '焉', '哉', '乎', '耶', '歟', '云']
+    for marker in final_markers:
+        if word.endswith(marker):
+            return True
+    
+    # 3. 중세국어 어미 패턴 확인 (원문에만 적용)
     middle_korean_endings = [
         '니라', '노라', '도다', '로다', '가다', '거다',  # 종결어미
         '려니와', '거니와', '로되', '되',              # 연결어미
@@ -562,11 +556,11 @@ def _should_break_by_mecab_src(word: str, morpheme_info: List[tuple]) -> bool:
         if word.endswith(ending):
             return True
     
-    # 2. '호되' 특별 처리 - 인용 표지로 강력한 분할 신호
+    # 4. '호되' 특별 처리 - 인용 표지로 강력한 분할 신호
     if word.endswith('호되'):
         return True  # 다음 어절부터 인용문이므로 확실한 경계
     
-    # 3. 일반적인 MeCab 분석 결과 확인 (번역문과 동일)
+    # 5. 일반적인 MeCab 분석 결과 확인 (번역문과 동일)
     return _should_break_by_mecab(word, morpheme_info)
 
 def split_by_whitespace_and_colon(text: str) -> List[str]:
@@ -1011,7 +1005,36 @@ def _merge_target_chunks_sequential(chunks: List[str], target_count: int) -> Lis
 
 # 문법적 경계 표지와 콤마를 간결하게 인식하는 함수 추가
 def is_boundary_marker(text: str, is_source: bool = False) -> bool:
-    """문법적 경계 표지 또는 콤마 경계인지 확인 (원문/번역문 구분, 발화동사 탐지 통합)"""
+    """문법적 경계 표지 또는 콤마 경계인지 확인 (원문/번역문 구분, 발화동사 탐지 통합, JX 보조사 강화)"""
+    
+    # 🆕 0. JX 보조사에 해당하는 한글 문법 요소 확인 (번역문에서만)
+    if not is_source:
+        # JX 보조사의 한글 대응 표현들 (의미 단위 경계 역할)
+        jx_equivalents = [
+            '것이다', '것이요', '것이니', '것이라',  # 명사화 (所)
+            '바이다', '바요', '바이니', '바라',      # 명사화 (所)
+            '로써', '으로써', '로서', '으로서',      # 수단/자격 (以)
+            '에서', '로부터', '에게서', '에서부터',  # 출발점 (於)
+            '면서', '하면서', '이면서', '으면서',    # 동시 (而)
+            '그러나', '그런데', '하지만', '하나',    # 전환 (而, 然)
+            '그리하여', '그러므로', '따라서',       # 결과 (故)
+            '조차', '마저', '까지', '이야말로',     # 강조/한정
+            '뿐만', '뿐이', '만이', '만',          # 한정 (唯)
+        ]
+        
+        for pattern in jx_equivalents:
+            if text.endswith(pattern):
+                return True
+        
+        # 명사화 패턴 (것/바 + 조사)
+        import re
+        nominalization_patterns = [
+            r'것[이을을는도만까지마저조차]?$',
+            r'바[이을을는도만까지마저조차]?$'
+        ]
+        for pattern in nominalization_patterns:
+            if re.search(pattern, text):
+                return True
     
     # 1. 문법적 표지 확인 (기존 로직)
     for marker, functions in BOUNDARY_MARKERS.items():
@@ -1085,7 +1108,7 @@ def get_boundary_strength(text: str, is_source: bool = False) -> float:
     return 0.0
 
 def _calculate_keyword_similarity(src_unit: str, tgt_chunk: str) -> float:
-    """키워드 기반 의미 유사도 계산 - 한문-한글 매칭 강화 (괄호 한자 포함)"""
+    """키워드 기반 의미 유사도 계산 - 한문-한글 매칭 강화 (괄호 한자 + 문법적 표지 포함)"""
     
     # 🆕 '호되'-콜론 특별 매칭 (우선순위 1)
     if src_unit.endswith('호되') and tgt_chunk.endswith('：'):
@@ -1114,11 +1137,35 @@ def _calculate_keyword_similarity(src_unit: str, tgt_chunk: str) -> float:
         else:
             return base_score
     
+    # 🆕 문법적 표지 매칭 추가 (우선순위 2)
+    src_markers = _extract_grammatical_markers(src_unit, is_source=True)
+    tgt_markers = _extract_grammatical_markers(tgt_chunk, is_source=False)
+    
+    # 문법적 표지 매칭 점수 계산
+    grammatical_bonus = 0.0
+    if src_markers and tgt_markers:
+        # JX 보조사 매칭 (특별 처리)
+        src_jx = [m for m in src_markers if not m.startswith(('FINAL_', 'CONN_'))]
+        tgt_jx = [m for m in tgt_markers if m.startswith(('SUBST_', 'LOC_', 'MEANS_', 'EMPH_', 'INCL_', 'ONLY_', 'QUOT_', 'PRED_'))]
+        
+        if src_jx and tgt_jx:
+            # 보조사 수의 일치도에 따른 보너스
+            jx_ratio = min(len(src_jx), len(tgt_jx)) / max(len(src_jx), len(tgt_jx))
+            grammatical_bonus += jx_ratio * 0.15  # 문법적 표지 매칭 보너스
+        
+        # 문말 표지 매칭
+        src_final = [m for m in src_markers if m.startswith('FINAL_')]
+        tgt_final = [m for m in tgt_markers if m.startswith('PRED_')]
+        
+        if src_final and tgt_final:
+            grammatical_bonus += 0.1  # 문말 표지 일치 보너스
+    
     # 한자 키워드 추출 (원문에서)
     src_hanja = regex.findall(r'\p{Han}+', src_unit)
     
     if not src_hanja:
-        return 0.0
+        # 한자가 없어도 문법적 표지가 있으면 기본 점수 제공
+        return min(grammatical_bonus, 0.3) if grammatical_bonus > 0 else 0.0
     
     # 🆕 번역문에서 한자 추출 - 괄호 안 한자 우선 고려
     # 1. 괄호 안의 한자 추출 (가장 중요)
@@ -1198,7 +1245,8 @@ def _calculate_keyword_similarity(src_unit: str, tgt_chunk: str) -> float:
     if src_punct and tgt_punct:
         punctuation_bonus = len(src_punct & tgt_punct) / max(len(src_punct | tgt_punct), 1) * 0.1
     
-    final_score = keyword_ratio * length_factor + bracket_bonus + punctuation_bonus
+    # 🆕 최종 점수 계산 (문법적 표지 보너스 포함)
+    final_score = keyword_ratio * length_factor + bracket_bonus + punctuation_bonus + grammatical_bonus
     return min(final_score, 1.0)
 
 def _calculate_content_similarity(src_content: str, tgt_content: str) -> float:
@@ -1596,3 +1644,57 @@ def is_discourse_marker(text: str) -> bool:
         logger.debug(f"담화 표지 탐지 중 오류: {e}")
     
     return False
+
+def _extract_grammatical_markers(text: str, is_source: bool = True) -> List[str]:
+    """텍스트에서 문법적 표지 추출 (JX 보조사 및 문법 요소 포함)"""
+    markers = []
+    
+    if is_source:
+        # 원문(한문)에서 주요 문법적 표지 추출
+        # JX류 보조사들 (위치와 빈도가 중요)
+        jx_patterns = [r'之', r'其', r'者', r'所', r'以', r'於', r'而', r'則', r'故', r'乃', r'且', r'若', r'如', r'與']
+        for pattern in jx_patterns:
+            if pattern in text:
+                # 빈도와 위치 정보도 함께 저장
+                count = text.count(pattern)
+                for i in range(count):
+                    markers.append(f"{pattern}_{i}")  # 순서 구분
+        
+        # 문말 표지 (문장 종결 의미)
+        final_patterns = [r'也', r'矣', r'焉', r'哉', r'乎', r'耶', r'歟', r'云']
+        for pattern in final_patterns:
+            if pattern in text:
+                markers.append(f"FINAL_{pattern}")
+        
+        # 연결 표지
+        conn_patterns = [r'然', r'然而', r'是以', r'故', r'因', r'由']
+        for pattern in conn_patterns:
+            if pattern in text:
+                markers.append(f"CONN_{pattern}")
+                
+    else:
+        # 번역문(한글)에서 문법적 표지 추출
+        import re
+        
+        # 보조사/조사 패턴 (순서 보존)
+        josa_patterns = [
+            (r'는\s*것(?:이|을|도|만|은|이다)', 'SUBST_것'),  # 명사화
+            (r'던\s*것(?:이|을|도|만|은|이다)', 'SUBST_것'),
+            (r'할\s*것(?:이|을|도|만|은|이다)', 'SUBST_것'),
+            (r'(?:에서|에게서|로부터|부터)', 'LOC_FROM'),  # 출발점
+            (r'(?:에게|한테|더러)', 'LOC_TO'),  # 도착점
+            (r'(?:으로서|로서|으로써|로써)', 'MEANS'),  # 수단/자격
+            (r'(?:이야말로|야말로)', 'EMPH_강조'),  # 강조
+            (r'(?:조차|마저|까지)', 'INCL_포함'),  # 포함
+            (r'(?:만|뿐)', 'ONLY_한정'),  # 한정
+            (r'라고\s*(?:하|말하|이르)', 'QUOT_직접'),  # 직접인용
+            (r'다고\s*(?:하|말하|이르)', 'QUOT_간접'),  # 간접인용
+            (r'(?:이다|아니다|하다|되다)(?:\s*$|\s*[\.。])', 'PRED_서술')  # 서술어
+        ]
+        
+        for pattern, marker_type in josa_patterns:
+            matches = re.finditer(pattern, text)
+            for i, match in enumerate(matches):
+                markers.append(f"{marker_type}_{i}_{match.start()}")  # 위치 포함
+    
+    return markers

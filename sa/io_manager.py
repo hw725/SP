@@ -39,6 +39,21 @@ def init_worker(device_id=None, embedder_name='bge'):
     """워커 프로세스 초기화 - 한 번만 실행 (device_id로 GPU 분배, 임베더 선택)"""
     global worker_embed_func, worker_modules
     try:
+        # jinja2 관련 오류 우회 - 멀티프로세싱 환경에서 jinja2.tests 모듈 누락 문제 해결
+        import sys
+        try:
+            import jinja2.tests
+        except (ImportError, ModuleNotFoundError):
+            # jinja2.tests 모듈을 mock으로 생성하여 임포트 오류 방지
+            import types
+            mock_module = types.ModuleType('jinja2.tests')
+            sys.modules['jinja2.tests'] = mock_module
+            try:
+                import jinja2
+                jinja2.tests = mock_module
+            except:
+                pass
+        
         if verbose_mode:
             print(f"워커 {mp.current_process().pid}: 초기화 시작 (device_id={device_id}, embedder={embedder_name})")
         
@@ -54,15 +69,18 @@ def init_worker(device_id=None, embedder_name='bge'):
             if verbose_mode:
                 print(f"워커 {mp.current_process().pid}: BGE 임베더 초기화 완료")
         
-        # 필요한 모듈들 임포트
-        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_meaning_units, split_tgt_by_src_units_semantic, split_tgt_meaning_units_sequential
+        # 필요한 모듈들 임포트 (핵심 함수만)
+        from sa_tokenizers.jieba_mecab import (
+            split_src_meaning_units, 
+            split_tgt_meaning_units_sequential,  # 메인 번역문 분할 함수
+            split_tgt_by_src_units_semantic     # 폴백용
+        )
         from punctuation import mask_brackets, restore_brackets
         
         worker_modules = {
             'split_src_meaning_units': split_src_meaning_units,
-            'split_tgt_meaning_units': split_tgt_meaning_units,
-            'split_tgt_by_src_units_semantic': split_tgt_by_src_units_semantic,
             'split_tgt_meaning_units_sequential': split_tgt_meaning_units_sequential,
+            'split_tgt_by_src_units_semantic': split_tgt_by_src_units_semantic,
             'mask_brackets': mask_brackets,
             'restore_brackets': restore_brackets
         }
@@ -262,7 +280,11 @@ def process_file(input_path: str, output_path: str, parallel: bool = False, work
         print(f"✅ 모델 로딩 완료! 문장 처리를 시작합니다...")
         logger.info("✅ 모델 로딩 완료, 순차 처리 시작")
         
-        from sa_tokenizers.jieba_mecab import split_src_meaning_units, split_tgt_by_src_units_semantic, split_tgt_meaning_units_sequential
+        from sa_tokenizers.jieba_mecab import (
+            split_src_meaning_units, 
+            split_tgt_meaning_units_sequential,
+            split_tgt_by_src_units_semantic  # 폴백용
+        )
         from punctuation import mask_brackets, restore_brackets
         
         for sentence_data in tqdm(sentence_data_list, desc="문장 처리"):
