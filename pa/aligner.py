@@ -65,8 +65,11 @@ def improved_align_paragraphs(
             'align_method': 'no_source'
         } for tgt_sent in tgt_sentences]
     print(f"🔄 의미적 병합 정렬 시작: {len(tgt_sentences)}개 번역문")
-    from sentence_splitter import split_source_by_whitespace_and_align
-    aligned_src_chunks = split_source_by_whitespace_and_align(source_text, tgt_sentences, embed_func, similarity_threshold)
+    from sentence_splitter import split_and_align_with_chinese_merge
+    aligned_src_chunks, merged_target_sentences = split_and_align_with_chinese_merge(source_text, tgt_sentences, embed_func, similarity_threshold)
+    
+    # 병합된 번역문 사용
+    tgt_sentences = merged_target_sentences
     # 임베딩 유사도 계산 및 결과 생성
     from sklearn.metrics.pairwise import cosine_similarity
     def safe_embed(texts):
