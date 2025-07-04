@@ -7,7 +7,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from typing import List, Dict
-from sentence_splitter import split_target_sentences_advanced
+from sentence_splitter import split_target_sentences_advanced, split_source_by_whitespace_and_align
 
 # 패키지 import 방식으로 복원
 from sa.sa_embedders import get_embedder
@@ -42,65 +42,39 @@ def get_embedder_function(embedder_name: str, device: str = "cpu", openai_model:
 # improved_align_paragraphs 직접 포함 (circular import 제거)
 def improved_align_paragraphs(
     tgt_sentences: List[str], 
-    src_chunks: List[str], 
-    embed_func,
+    src_text: str, 
+    embed_func=None,
     similarity_threshold: float = 0.3
 ) -> List[Dict]:
+    """
+    순차적 1:1 정렬 (공백/포맷 100% 보존, 의미적 align 제거)
+    """
     if not tgt_sentences:
         return []
-    if isinstance(src_chunks, str):
-        source_text = src_chunks
-    elif isinstance(src_chunks, list) and len(src_chunks) == 1:
-        source_text = src_chunks[0]
-    elif isinstance(src_chunks, list):
-        source_text = ' '.join(str(chunk) for chunk in src_chunks)
-    else:
-        source_text = str(src_chunks) if src_chunks else ""
-    if not source_text.strip():
-        return [{
-            '원문': '',
-            '번역문': tgt_sent,
-            'similarity': 0.0,
-            'split_method': 'whitespace',
-            'align_method': 'no_source'
-        } for tgt_sent in tgt_sentences]
-    print(f"🔄 의미적 병합 정렬 시작: {len(tgt_sentences)}개 번역문")
-    from sentence_splitter import split_source_by_whitespace_and_align
-    aligned_src_chunks = split_source_by_whitespace_and_align(source_text, tgt_sentences, embed_func, similarity_threshold)
-    # 임베딩 유사도 계산 및 결과 생성
-    from sklearn.metrics.pairwise import cosine_similarity
-    def safe_embed(texts):
-        try:
-            return np.array(embed_func(texts))
-        except Exception as e:
-            print(f"임베딩 오류: {e}")
-            return np.zeros((len(texts), 768))
-    tgt_embeddings = safe_embed(tgt_sentences)
-    src_embeddings = safe_embed(aligned_src_chunks)
-    if tgt_embeddings.shape[1] != src_embeddings.shape[1]:
-        min_dim = min(tgt_embeddings.shape[1], src_embeddings.shape[1])
-        tgt_embeddings = tgt_embeddings[:, :min_dim]
-        src_embeddings = src_embeddings[:, :min_dim]
-    sim_matrix = cosine_similarity(tgt_embeddings, src_embeddings)
+    
+    # 원문을 번역문 개수에 맞춰 순차적으로 분할
+    aligned_src_chunks = split_source_by_whitespace_and_align(src_text, len(tgt_sentences))
+    
     alignments = []
     for i in range(len(tgt_sentences)):
         alignments.append({
             '원문': aligned_src_chunks[i] if i < len(aligned_src_chunks) else '',
             '번역문': tgt_sentences[i],
-            'similarity': sim_matrix[i, i] if i < sim_matrix.shape[0] and i < sim_matrix.shape[1] else 0.0,
-            'split_method': 'whitespace',
-            'align_method': 'semantic_merge'
+            'similarity': 1.0,  # 순차적 정렬이므로 유사도는 1.0
+            'split_method': 'punctuation',
+            'align_method': 'sequential'
         })
+    
     # 남은 원문 청크가 있으면 추가
     for j in range(len(tgt_sentences), len(aligned_src_chunks)):
         alignments.append({
             '원문': aligned_src_chunks[j],
             '번역문': '',
             'similarity': 0.0,
-            'split_method': 'whitespace',
-            'align_method': 'semantic_merge_unmatched_src'
+            'split_method': 'punctuation',
+            'align_method': 'sequential_unmatched_src'
         })
-    print(f"✅ 의미적 병합 정렬 완료: {len(alignments)}개 항목")
+    
     return alignments
 
 def process_paragraph_alignment(
@@ -113,17 +87,14 @@ def process_paragraph_alignment(
 ):
     """PA 처리 (공백/구두점 기반 순차적 분할만 사용)"""
     print(f"🔄 PA 처리 시작 (공백/구두점 순차적 분할)")
-    tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="spacy")
-    # 원문 분할: spaCy 완전 배제, 공백/구두점 기준 분할만 사용
-    src_chunks = src_paragraph  # improved_align_paragraphs에서 직접 분할
+    tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="punctuation")
     print(f"   번역문: {len(tgt_sentences)}개 문장")
-    print(f"   원문: {len(src_paragraph)}개 토큰")
-    embed_func = get_embedder_function(embedder_name, device=device)
+    print(f"   원문 길이: {len(src_paragraph)}자")
+    
+    # embed_func, similarity_threshold 등은 무시 (sequential align만 사용)
     alignments = improved_align_paragraphs(
         tgt_sentences, 
-        src_chunks, 
-        embed_func, 
-        similarity_threshold
+        src_paragraph  # 문자열로 직접 전달
     )
     # 문단식별자 부여
     for a in alignments:

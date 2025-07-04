@@ -14,16 +14,17 @@ try:
 except Exception:
     nlp_zh = None
 
-def split_target_sentences_advanced(text: str, max_length: int = 150, splitter: str = "spacy") -> List[str]:
+def split_target_sentences_advanced(text: str, max_length: int = 150, splitter: str = "punctuation") -> List[str]:
     """
-    번역문 분할 - spaCy 의미 단위 + 기존 기준 후처리
-    splitter: "spacy" (기본)
+    번역문 분할 - 반드시 문장 종결부호+공백 기준만 사용 (spaCy 등 의미 단위 분할 완전 제거)
     """
-    semantic_sentences = split_with_spacy(text, is_target=True)
-    if not semantic_sentences:
-        semantic_sentences = split_with_smart_punctuation_rules(text)
-    final_sentences = apply_legacy_rules(semantic_sentences, max_length)
-    return final_sentences
+    # 종결부호(한글/한자/영문) + 공백 또는 텍스트 끝 기준 분할
+    # 종결부호: . ? ! 。" ？ ！ ○ 등
+    pattern = r'(?<=[.!?。？！○])\s+'  # 종결부호 뒤 공백 기준
+    sentences = re.split(pattern, text.strip())
+    # 빈 문장 제거하고 앞뒤 공백 제거
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences
 
 def split_with_spacy(text: str, is_target: bool = True) -> List[str]:
     if contains_chinese(text):
@@ -111,98 +112,51 @@ def contains_chinese(text: str) -> bool:
     chinese_count = len(regex.findall(r'\p{Han}', text))
     return chinese_count > len(text) * 0.3
 
-def split_source_by_whitespace_and_align(src_text: str, target_sentences: List[str], embed_func, similarity_threshold: float = 0.5, max_tokens: int = 50) -> List[str]:
+def split_source_by_whitespace_and_align(source: str, target_count: int) -> List[str]:
     """
-    원문을 공백/구두점 단위로 분할한 뒤, 번역문 문장과 의미적으로 가장 잘 맞는 경계에서 토큰을 합쳐 alignment.
-    **수정**: 공백을 보존하여 원본 텍스트 구조 유지
-    """
-    # 구분자를 보존하면서 토큰화 - 원본 위치 정보 추적
-    delimiters = r'([：。！？；、，\s]+)'  # 괄호 추가로 구분자도 함께 캡처
-    parts = re.split(delimiters, src_text)
+    원문(한문) 분할: 번역문 분할 개수에 맞춰 순차적으로 분할(병합/패딩), 모든 공백/포맷 100% 보존
     
-    # 빈 문자열 제거하고 토큰과 구분자 분리
+    주어+발화동사+인용구 병합 시에도 공백이 손상되지 않도록 보장
+    """
+    if not source.strip():
+        return [''] * target_count
+    
+    # 1. 원문을 의미 단위로 토큰화 (공백 보존)
+    # 구두점과 공백을 구분자로 사용하되, 구분자도 보존
+    import re
+    # 구분자: 중국어 구두점, 공백, 줄바꿈 등
+    delimiter_pattern = r'([：。！？；、，\s]+)'
+    parts = re.split(delimiter_pattern, source)
+    
+    # 빈 문자열 제거하지 않고 모든 부분 보존
     tokens = []
-    separators = []
-    current_pos = 0
+    for part in parts:
+        if part:  # 빈 문자열이 아닌 경우만
+            tokens.append(part)
     
-    for i, part in enumerate(parts):
-        if part and part.strip():  # 비어있지 않은 토큰
-            if re.match(r'[：。！？；、，\s]+', part):  # 구분자인 경우
-                if tokens:  # 이전 토큰이 있는 경우에만 구분자 저장
-                    separators.append(part)
-            else:  # 실제 토큰인 경우
-                tokens.append(part)
-                if i < len(parts) - 1:  # 마지막이 아닌 경우 다음 구분자 찾기
-                    next_sep = ""
-                    for j in range(i + 1, len(parts)):
-                        if parts[j] and re.match(r'[：。！？；、，\s]+', parts[j]):
-                            next_sep = parts[j]
-                            break
-                        elif parts[j]:  # 다음 토큰을 만난 경우
-                            break
-                    separators.append(next_sep)
+    if not tokens:
+        return [''] * target_count
     
-    # 구분자 수 조정
-    while len(separators) < len(tokens):
-        separators.append('')
-    
-    if not tokens or len(tokens) < len(target_sentences):
-        # 원본이 부족한 경우 원본 그대로 반환하되 개수 맞춤
-        return [src_text] + [''] * (len(target_sentences) - 1) if src_text else [''] * len(target_sentences)
-    
-    # 의미적 병합 (임베딩 유사도 기반, 순서 보존)
-    aligned_chunks = []
-    start = 0
-    
-    for tgt in target_sentences:
-        best_end = min(start + max_tokens, len(tokens))
-        best_score = -float('inf')
-        best_idx = start + 1
+    # 2. 번역문 개수에 맞춰 순차적으로 토큰들을 병합
+    if len(tokens) <= target_count:
+        # 토큰이 적은 경우: 각 토큰을 하나씩 배정하고 나머지는 빈 문자열
+        result = tokens + [''] * (target_count - len(tokens))
+        return result[:target_count]
+    else:
+        # 토큰이 많은 경우: 균등하게 분배하여 병합
+        chunk_size = len(tokens) // target_count
+        remainder = len(tokens) % target_count
         
-        for end in range(start + 1, best_end + 1):
-            # 토큰과 구분자를 원본 순서대로 결합
-            chunk_parts = []
-            for i in range(start, end):
-                chunk_parts.append(tokens[i])
-                if i < len(separators) and i < end - 1:  # 마지막 토큰이 아닌 경우에만 구분자 추가
-                    chunk_parts.append(separators[i])
+        result = []
+        start = 0
+        for i in range(target_count):
+            # 나머지가 있으면 앞쪽 청크들에 하나씩 더 배정
+            current_chunk_size = chunk_size + (1 if i < remainder else 0)
+            end = start + current_chunk_size
             
-            chunk = ''.join(chunk_parts)
-            
-            try:
-                score = float(embed_func([chunk])[0] @ embed_func([tgt])[0])
-            except Exception:
-                score = 0.0
-            
-            if score > best_score:
-                best_score = score
-                best_idx = end
+            # 토큰들을 그대로 연결 (공백/구두점 보존)
+            chunk = ''.join(tokens[start:end])
+            result.append(chunk)
+            start = end
         
-        # 최적 청크 생성 (구분자 포함)
-        chunk_parts = []
-        for i in range(start, best_idx):
-            chunk_parts.append(tokens[i])
-            if i < len(separators) and i < best_idx - 1:
-                chunk_parts.append(separators[i])
-        
-        aligned_chunks.append(''.join(chunk_parts))
-        start = best_idx
-        
-        if start >= len(tokens):
-            break
-    
-    # 남은 토큰이 있으면 마지막에 합침
-    if start < len(tokens):
-        remaining_parts = []
-        for i in range(start, len(tokens)):
-            remaining_parts.append(tokens[i])
-            if i < len(separators):
-                remaining_parts.append(separators[i])
-        aligned_chunks.append(''.join(remaining_parts))
-    
-    # 결과 길이를 target_sentences와 맞춤
-    result = aligned_chunks[:len(target_sentences)]
-    while len(result) < len(target_sentences):
-        result.append('')
-    
-    return result
+        return result
