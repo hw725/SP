@@ -30,17 +30,21 @@ except ImportError as e:
         import numpy as np
         return np.zeros((len(args[0]), 1024))  # fallback shape
 try:
-    from .aligner import align_units, get_embedding_function
+    from .alignment_functions import align_units
+    from .embedders import get_embedder
 except ImportError as e:
     import logging
-    logging.error(f"aligner import 실패: {e}")
-    def align_tokens(*args, **kwargs):
+    logging.error(f"필수 모듈 임포트 실패: {e}")
+    def align_units(*args, **kwargs):
         logging.error("정렬 기능을 사용할 수 없습니다.")
         return []
+    def get_embedder(*args, **kwargs):
+        logging.error("임베딩 기능을 사용할 수 없습니다.")
+        return None
 
 # punctuation import 안전 처리
 try:
-    from punctuation import process_punctuation
+    from .punctuation import process_punctuation
 except ImportError:
     def process_punctuation(alignments, src_units, tgt_units):
         return alignments
@@ -188,16 +192,15 @@ def process_file(
                 print("[DEBUG] split_src_meaning_units 종료")
                 print(f"[REALTIME] src_units: {src_units}")
 
-                print("[DEBUG] split_tgt_meaning_units 진입")
-                tgt_units = split_tgt_meaning_units(
+                print("[DEBUG] split_tgt_meaning_units_sequential 진입")
+                tgt_units = split_tgt_meaning_units_sequential(
                     src_text,
                     tgt_text,
-                    use_semantic=use_semantic,
                     min_tokens=min_tokens,
                     max_tokens=max_tokens,
                     embed_func=compute_embeddings_with_cache if use_semantic else None
                 )
-                print("[DEBUG] split_tgt_meaning_units 종료")
+                print("[DEBUG] split_tgt_meaning_units_sequential 종료")
                 print(f"[REALTIME] tgt_units: {tgt_units}")
 
                 # 41번째 문장 src/tgt 별도 저장
@@ -219,21 +222,20 @@ def process_file(
                 )
                 print(f"[DEBUG] split_src_meaning_units 반환 (문장 {idx+1}, {len(src_units)}개, {time.time()-t0:.2f}s): {src_units}")
                 # 2. 번역문 토크나이징  
-                print(f"[DEBUG] split_tgt_meaning_units 진입 (문장 {idx+1})")
+                print(f"[DEBUG] split_tgt_meaning_units_sequential 진입 (문장 {idx+1})")
                 t0 = time.time()
-                tgt_units = split_tgt_meaning_units(
+                tgt_units = split_tgt_meaning_units_sequential(
                     src_text,
                     tgt_text,
-                    use_semantic=use_semantic,
                     min_tokens=min_tokens,
                     max_tokens=max_tokens,
                     embed_func=compute_embeddings_with_cache if use_semantic else None
                 )
-                print(f"[DEBUG] split_tgt_meaning_units 반환 (문장 {idx+1}, {len(tgt_units)}개, {time.time()-t0:.2f}s): {tgt_units}")
+                print(f"[DEBUG] split_tgt_meaning_units_sequential 반환 (문장 {idx+1}, {len(tgt_units)}개, {time.time()-t0:.2f}s): {tgt_units}")
                 # 3. 정렬
                 print(f"[DEBUG] align_tokens 진입 (문장 {idx+1})")
                 t0 = time.time()
-                embed_func = get_embedding_function(
+                embed_func = get_embedder(
                     embedder_name=kwargs.get("embedder_name", "bge"),
                     openai_model=openai_model,
                     openai_api_key=openai_api_key,
@@ -363,9 +365,9 @@ def process_file_with_modules(
         embed_func = None
         if use_semantic:
             if embedder_name == "openai":
-                embed_func = get_embedding_function(embedder_name, model_name=openai_model, openai_api_key=openai_api_key, **kwargs)
+                embed_func = embedder_module.get_embedder(model_name=openai_model, openai_api_key=openai_api_key, **kwargs)
             else:
-                embed_func = get_embedding_function(embedder_name, **kwargs)
+                embed_func = embedder_module.get_embed_func(device_id=kwargs.get("device", "cpu"))
         
         io_manager = IOManager()
         df = io_manager.read_file(input_file)
@@ -393,8 +395,8 @@ def process_file_with_modules(
             progress_bar.set_description(f"문장 {idx+1}/{total_sentences}")
             
             try:
-                src_text = row.get('src', '')
-                tgt_text = row.get('tgt', '')
+                src_text = row.get('source', '')
+                tgt_text = row.get('target', '')
                 
                 if not src_text.strip() or not tgt_text.strip():
                     logger.warning(f"문장 {idx+1}: 빈 텍스트 - 건너뜀")
@@ -407,8 +409,7 @@ def process_file_with_modules(
                     tgt_units = split_tgt(
                         src_text, tgt_text,
                         min_tokens=min_tokens,
-                        max_tokens=max_tokens,
-                        embed_func=embed_func
+                        max_tokens=max_tokens
                     )
                 except Exception as e:
                     logger.error(f"Error during tokenization for sentence {idx+1}: {e}")

@@ -15,13 +15,11 @@ except Exception as e:
     openai_embedder = None
 
 try:
-    from .bge import compute_embeddings_with_cache as bge_embedder, get_embed_func as bge_get_embed_func, get_embed_func, get_embedding_manager
+    from .bge import compute_embeddings_with_cache as bge_embedder, get_embed_func as bge_get_embed_func
 except Exception as e:
     logger.error(f"BGE 임베더 임포트 실패: {e}")
     bge_embedder = None
     bge_get_embed_func = None
-    get_embed_func = None
-    get_embedding_manager = None
 
 def get_embedder(name: str, device_id=None, model_name=None, openai_api_key=None):
     """임베더 이름에 따라 함수 반환 (openai/bge, device_id/model_name 지정 가능, 에러 방지)"""
@@ -38,4 +36,4 @@ def get_embedder(name: str, device_id=None, model_name=None, openai_api_key=None
     else:
         raise ValueError(f"지원하지 않는 임베더: {name}. 지원: openai, bge")
 
-__all__ = ['openai_embedder', 'bge_embedder', 'get_embedder', 'compute_embeddings_with_cache', 'get_embed_func']
+__all__ = ['openai_embedder', 'bge_embedder', 'get_embedder', 'compute_embeddings_with_cache']

@@ -185,17 +185,21 @@ def split_tgt_meaning_units_sequential(
     **kwargs
 ) -> List[str]:
     """Splits target text (Korean) ensuring integrity by reconstructing from MeCab tokens."""
-    if not mecab or not tgt_text:
-        logger.warning("MeCab not initialized or target text is empty. Falling back to simple split.")
-        return [tgt_text] if tgt_text else []
+    if not tgt_text:
+        return []
 
     try:
-        # Reconstruct the text from MeCab nodes to preserve original spacing as much as possible
-        nodes = mecab.parse(tgt_text, as_nodes=True)
-        reconstructed_text = "".join([n.surface for n in nodes if n.surface])
+        if mecab:
+            # MeCab은 문자열을 반환하므로, 이를 직접 사용
+            reconstructed_text = mecab.parse(tgt_text)
+            # MeCab 결과는 각 라인이 형태소 분석 결과이므로, 이를 다시 문장으로 합쳐야 함
+            # 여기서는 간단히 줄바꿈으로 분리된 것을 다시 합치는 것으로 가정
+            reconstructed_text = " ".join([line.split('\t')[0] for line in reconstructed_text.split('\n') if line.strip()])
 
-        if reconstructed_text != tgt_text:
-            logger.warning(f"Target text reconstruction from MeCab failed. Original: '{tgt_text}', Reconstructed: '{reconstructed_text}'. Integrity might be compromised.")
+            if reconstructed_text != tgt_text:
+                logger.warning(f"Target text reconstruction from MeCab failed. Original: '{tgt_text}', Reconstructed: '{reconstructed_text}'. Integrity might be compromised.")
+        else:
+            reconstructed_text = tgt_text # Fallback if MeCab is not available
 
         # Simple splitting logic based on punctuation for demonstration
         # This can be replaced with more sophisticated logic based on MeCab's POS tags

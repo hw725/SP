@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # SA 임베더 - 선택적 import
 try:
     from .embedders import get_embedder as get_embedding_function
-    from .processor import align_units
+    from .alignment_functions import align_units
     SA_EMBEDDER_AVAILABLE = True
 except ImportError:
     SA_EMBEDDER_AVAILABLE = False
