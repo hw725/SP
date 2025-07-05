@@ -8,6 +8,7 @@ import os
 from typing import Optional
 
 import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.stdout.reconfigure(encoding='utf-8')
 from core.io_utils import IOManager
 
@@ -84,18 +85,33 @@ def process_single_file(
     try:
         if parallel:
             print("⚡ 병렬 처리 모드로 실행합니다.")
-            from core.processor import process_file
-            # 병렬 처리 함수 호출 - embedder_name 전달
-            results_df = process_file(
-                input_file,
-                use_semantic=use_semantic,
-                min_tokens=min_tokens,
-                max_tokens=max_tokens,
-                save_results=True,
-                output_file=output_file,
+            from core.processor import process_file_with_modules
+            tokenizer_module = get_tokenizer_module(tokenizer_name)
+            embedder_module = get_embedder_module(embedder_name)
+            
+            # 토크나이저 함수 동적 할당
+            if tokenizer_name == 'jieba':
+                split_src = tokenizer_module.split_src_meaning_units
+                split_tgt = tokenizer_module.split_source_by_whitespace_and_align # 중국어 번역문도 sequential로 처리
+            elif tokenizer_name == 'mecab':
+                split_src = tokenizer_module.split_src_meaning_units # 원문은 일단 jieba 그대로
+                split_tgt = tokenizer_module.split_tgt_meaning_units_sequential # 한국어 번역문은 mecab
+            else:
+                raise ValueError(f"지원하지 않는 토크나이저: {tokenizer_name}")
+
+            # 임베더 함수 동적 할당
+            if embedder_name == "openai":
+                embed_func = embedder_module.compute_embeddings_with_cache
+            else:
+                embed_func = embedder_module.get_embed_func(device_id=kwargs.get("device", "cpu"))
+
+            results_df = process_file_with_modules(
+                input_file, output_file,
+                tokenizer_module, embedder_module,
+                embedder_name,  # 추가!
+                use_semantic, min_tokens, max_tokens,
                 openai_model=openai_model,
-                openai_api_key=openai_api_key,
-                embedder_name=embedder_name
+                openai_api_key=openai_api_key
             )
             if results_df is not None:
                 print(f"🎉 병렬 처리 완료! 결과: {len(results_df)}개 구")
@@ -103,20 +119,6 @@ def process_single_file(
             else:
                 print(f"❌ 병렬 처리 실패")
                 return False
-        # 항상 동적 모듈 로딩 경로 사용
-        print("✅ 동적 모듈 로딩...")
-        tokenizer_module = get_tokenizer_module(tokenizer_name)
-        embedder_module = get_embedder_module(embedder_name)
-        print(f"✅ 모듈 로드 완료")
-        from core.processor import process_file_with_modules
-        results = process_file_with_modules(
-            input_file, output_file,
-            tokenizer_module, embedder_module,
-            embedder_name,  # 추가!
-            use_semantic, min_tokens, max_tokens,
-            openai_model=openai_model,
-            openai_api_key=openai_api_key
-        )
 
         end_time = time.time()  # ⏱️ 처리 종료 시간 기록
 
