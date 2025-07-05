@@ -5,27 +5,36 @@
 ---
 
 ## 주요 특징
+- **모듈 구조 개선**: 공통 모듈(`io_utils.py`, `aligner.py`, `processor.py`, `punctuation.py`, `embedders`, `tokenizers`)이 `core` 디렉토리로 이동하여 코드 재사용성 및 관리 용이성 향상.
 - SA: 문장/구 단위 정렬 (원문: jieba, 번역문: mecab)
 - PA: 문단→문장 분할 및 정렬 (spaCy는 번역문 분할에만 사용, 원문은 의미적 병합만 사용)
-- **원문(한문/중문)은 항상 공백/구두점 기준 토큰화 후, 임베딩 유사도 기반으로 번역문 개수에 맞게 의미적으로 병합**
+- **원문(한문/중문)은 항상 공백/구두점 기준 토큰화 후, 임베딩 유사도 기반으로 번역문 개수에 맞게 의미적으로 병합하며, 어절 내부에서 분할되지 않도록 로직 개선.**
 - spaCy 기반 원문 분할, huggingface/transformers/sentence-transformers 등 모든 불필요한 코드/의존성/분기 완전 제거
-- 지원 임베더: BGE-M3, OpenAI(모델/키 직접 선택)
+- 지원 임베더: BGE-M3 (기본값), OpenAI(모델/키 직접 선택)
+- **OpenAI API 키는 시스템 환경 변수 `OPENAI_API_KEY`를 통해 설정 가능.**
 - 실시간 진행률(터미널 tqdm/GUI progress bar), 캐시, 상세 로그 지원
 - CLI/GUI 환경에서 대용량/고품질 정렬에 최적화
 - 경량화: 성능이 우수한 임베더(BGE, OpenAI)와 토크나이저(jieba, mecab)만 남기고 경량화
+- **입출력 형식 유연성**: 입력 파일이 Excel(xlsx)이더라도 출력 파일을 CSV나 TXT 형식으로 지정 가능.
 
 ---
 
 ## CLI 사용법 (권장)
 ```bash
 # SA 예시 (문장/구 단위 정렬)
-python sa/main.py input.xlsx output.xlsx --tokenizer mecab --embedder bge --min-tokens 2 --max-tokens 10
+poetry run python sa/main.py input.xlsx output.xlsx --tokenizer mecab --embedder bge --min-tokens 2 --max-tokens 10
 
-# OpenAI 임베더 사용
-python sa/main.py input.xlsx output.xlsx --embedder openai --openai-model text-embedding-3-large --openai-api-key sk-xxxx
+# OpenAI 임베더 사용 (API 키는 환경 변수에서 자동 로드)
+poetry run python sa/main.py input.xlsx output.xlsx --embedder openai --openai-model text-embedding-3-large
 
 # PA 예시 (문단→문장 정렬)
-python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --threshold 0.35
+poetry run python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --threshold 0.35
+
+# 출력 파일을 CSV로 지정 (PA 예시)
+poetry run python pa/main.py input.xlsx output.csv --embedder bge
+
+# 출력 파일을 TXT로 지정 (SA 예시)
+poetry run python sa/main.py input.xlsx output.txt --embedder openai
 ```
 
 ---
@@ -112,8 +121,8 @@ python pa/main.py input.xlsx output.xlsx --embedder bge --max-length 180 --thres
 python sa/main.py ...
 python pa/main.py ...
 ```
-- 입력/출력은 Excel(xlsx) 파일만 지원
-- OpenAI 임베더 사용 시 모델명/키를 CLI 옵션으로 직접 입력
+- 입력/출력은 Excel(xlsx), CSV, TXT 파일 모두 지원
+- OpenAI 임베더 사용 시 모델명/키를 CLI 옵션으로 직접 입력하거나 환경 변수 사용
 - 진행률/에러/로그는 CLI(터미널 tqdm) 및 GUI(진행률 바) 모두 실시간 표시
 
 ---
