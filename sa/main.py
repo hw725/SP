@@ -6,10 +6,7 @@ import time
 import sys
 import os
 from typing import Optional
-
-import sys
-sys.stdout.reconfigure(encoding='utf-8')
-from core.io_utils import IOManager
+from io_manager import process_file as process_file_parallel
 
 def setup_logging(verbose: bool = False):
     """로깅 설정"""
@@ -26,8 +23,8 @@ def setup_logging(verbose: bool = False):
 def get_tokenizer_module(tokenizer_name: str):
     """토크나이저 모듈 동적 로드 - jieba(원문), mecab(번역문)만 지원"""
     tokenizer_map = {
-        'jieba': 'core.tokenizers.jieba_mecab',
-        'mecab': 'core.tokenizers.jieba_mecab',
+        'jieba': 'sa_tokenizers.jieba_mecab',
+        'mecab': 'sa_tokenizers.jieba_mecab',
     }
     if tokenizer_name not in tokenizer_map:
         raise ValueError(f"지원하지 않는 토크나이저: {tokenizer_name}. 지원: jieba(원문), mecab(번역문)")
@@ -41,8 +38,8 @@ def get_tokenizer_module(tokenizer_name: str):
 def get_embedder_module(embedder_name: str):
     """임베더 모듈 동적 로드"""
     embedder_map = {
-        'openai': 'core.embedders.openai',
-        'bge': 'core.embedders.bge',
+        'openai': 'sa_embedders.openai',
+        'bge': 'sa_embedders.bge',
     }
     
     if embedder_name not in embedder_map:
@@ -84,17 +81,14 @@ def process_single_file(
     try:
         if parallel:
             print("⚡ 병렬 처리 모드로 실행합니다.")
-            from core.processor import process_file
+            from io_manager import process_file as io_process_file
             # 병렬 처리 함수 호출 - embedder_name 전달
-            results_df = process_file(
+            results_df = io_process_file(
                 input_file,
-                use_semantic=use_semantic,
-                min_tokens=min_tokens,
-                max_tokens=max_tokens,
-                save_results=True,
-                output_file=output_file,
-                openai_model=openai_model,
-                openai_api_key=openai_api_key,
+                output_file,
+                parallel=True,
+                workers=4,
+                batch_size=20,
                 embedder_name=embedder_name
             )
             if results_df is not None:
@@ -108,7 +102,7 @@ def process_single_file(
         tokenizer_module = get_tokenizer_module(tokenizer_name)
         embedder_module = get_embedder_module(embedder_name)
         print(f"✅ 모듈 로드 완료")
-        from core.processor import process_file_with_modules
+        from processor import process_file_with_modules
         results = process_file_with_modules(
             input_file, output_file,
             tokenizer_module, embedder_module,
@@ -130,9 +124,9 @@ def process_single_file(
             output_file_basic = output_file
 
             # 구 단위 형식 저장
-            output_file_phrase = output_file.replace('.xlsx', '_phrase.xlsx').replace('.csv', '_phrase.csv').replace('.txt', '_phrase.txt')
+            output_file_phrase = output_file.replace('.xlsx', '_phrase.xlsx')
 
-            from sa.io_utils import save_phrase_format_results
+            from io_utils import save_phrase_format_results
             save_phrase_format_results(results, output_file_phrase)
 
             print(f"📁 기본 출력: {output_file_basic}")
