@@ -83,23 +83,54 @@ def process_paragraph_alignment(
     embedder_name: str = 'bge',
     max_length: int = 150,
     similarity_threshold: float = 0.3,
-    device: str = "cpu"
+    device: str = "cpu",
+    quality_threshold: float = 0.8
 ):
-    """PA 처리 (공백/구두점 기반 순차적 분할만 사용)"""
-    print(f"🔄 PA 처리 시작 (공백/구두점 순차적 분할)")
-    tgt_sentences = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="punctuation")
-    print(f"   번역문: {len(tgt_sentences)}개 문장")
-    print(f"   원문 길이: {len(src_paragraph)}자")
-    
-    # embed_func, similarity_threshold 등은 무시 (sequential align만 사용)
-    alignments = improved_align_paragraphs(
-        tgt_sentences, 
-        src_paragraph  # 문자열로 직접 전달
+    """
+    PA 처리: 순차적/의미적 정렬 모두 실행, 가중합 similarity(0.4/0.6)로 품질 기준(0.8) 이상이면 가중합 결과, 아니면 의미적 결과만 채택
+    """
+    print(f"🔄 PA 처리 시작 (순차적+의미적 병합)")
+    # 1. 순차적 정렬
+    tgt_sentences_seq = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="punctuation")
+    alignments_seq = improved_align_paragraphs(
+        tgt_sentences_seq, 
+        src_paragraph
     )
+    # 2. 의미적 병합
+    tgt_sentences_sem = split_target_sentences_advanced(tgt_paragraph, max_length, splitter="spacy")
+    embed_func = get_embedder_function(embedder_name, device=device)
+    alignments_sem = improved_align_paragraphs(
+        tgt_sentences_sem,
+        src_paragraph,
+        embed_func,
+        similarity_threshold
+    )
+    # 3. 쌍별 가중합 및 조건부 선택
+    results = []
+    max_len = max(len(alignments_seq), len(alignments_sem))
+    for i in range(max_len):
+        seq = alignments_seq[i] if i < len(alignments_seq) else {'원문':'','번역문':'','similarity':0.0,'split_method':'punctuation','align_method':'sequential'}
+        sem = alignments_sem[i] if i < len(alignments_sem) else {'원문':'','번역문':'','similarity':0.0,'split_method':'spacy','align_method':'semantic'}
+        # 가중합 similarity
+        weighted_sim = seq['similarity']*0.4 + sem['similarity']*0.6
+        if weighted_sim >= quality_threshold:
+            # 가중합 결과 채택, 정보 병합
+            result = {
+                '원문': sem['원문'] if sem['원문'] else seq['원문'],
+                '번역문': sem['번역문'] if sem['번역문'] else seq['번역문'],
+                'similarity': weighted_sim,
+                'split_method': f"seq+sem",
+                'align_method': 'hybrid'
+            }
+        else:
+            # 의미적 결과만 채택
+            result = sem.copy()
+            result['align_method'] = 'semantic_only'
+        results.append(result)
     # 문단식별자 부여
-    for a in alignments:
+    for a in results:
         a['문단식별자'] = 1
-    return alignments
+    return results
 
 
 def process_paragraph_file(
@@ -108,9 +139,10 @@ def process_paragraph_file(
     embedder_name: str = 'bge',
     max_length: int = 150,
     similarity_threshold: float = 0.3,
-    device: str = "cpu"
+    device: str = "cpu",
+    quality_threshold: float = 0.8
 ):
-    """파일 단위 처리 - spaCy 순차적 분할 정렬만 사용"""
+    """파일 단위 처리 - 순차적/의미적 정렬 모두 적용, 품질 기준 조건부 선택"""
     print(f"📂 파일 처리 시작: {input_file}")
     df = pd.read_excel(input_file)
     all_results = []
@@ -124,11 +156,61 @@ def process_paragraph_file(
                 embedder_name=embedder_name,
                 max_length=max_length,
                 similarity_threshold=similarity_threshold,
-                device=device
+                device=device,
+                quality_threshold=quality_threshold
             )
+            # 문단식별자 idx+1로 부여
+            for a in alignments:
+                a['문단식별자'] = idx + 1
             all_results.extend(alignments)
     result_df = pd.DataFrame(all_results)
     final_columns = ['문단식별자', '원문', '번역문', 'similarity', 'split_method', 'align_method']
+    result_df = result_df[final_columns]
+
+    # === 무결성 검증 및 보완 ===
+    # 입력 전체 원문/번역문 연결
+    input_src_all = ''.join([str(row.get('원문','')) for _, row in df.iterrows()])
+    input_tgt_all = ''.join([str(row.get('번역문','')) for _, row in df.iterrows()])
+    # 결과 전체 원문/번역문 연결
+    output_src_all = ''.join(result_df['원문'].fillna(''))
+    output_tgt_all = ''.join(result_df['번역문'].fillna(''))
+    # 원문 보완
+    if input_src_all != output_src_all:
+        print('⚠️ 원문 무결성 불일치: 누락/중복 보정 시도')
+        # 누락분 찾기
+        from difflib import SequenceMatcher
+        sm = SequenceMatcher(None, output_src_all, input_src_all)
+        opcodes = sm.get_opcodes()
+        for tag, i1, i2, j1, j2 in opcodes:
+            if tag == 'insert':
+                # input_src_all[j1:j2]가 누락됨 → 마지막 원문에 덧붙임
+                if len(result_df) > 0:
+                    result_df.at[result_df.index[-1], '원문'] += input_src_all[j1:j2]
+                else:
+                    # 결과가 없으면 새 쌍 추가
+                    result_df.loc[len(result_df)] = [df.shape[0], input_src_all[j1:j2], '', 1.0, 'integrity', 'src_patch']
+            elif tag == 'delete':
+                # output_src_all[i1:i2]가 중복됨 → 마지막 원문에서 제거
+                if len(result_df) > 0:
+                    last = result_df.at[result_df.index[-1], '원문']
+                    result_df.at[result_df.index[-1], '원문'] = last.replace(output_src_all[i1:i2], '', 1)
+    # 번역문 보완
+    if input_tgt_all != output_tgt_all:
+        print('⚠️ 번역문 무결성 불일치: 누락/중복 보정 시도')
+        from difflib import SequenceMatcher
+        sm = SequenceMatcher(None, output_tgt_all, input_tgt_all)
+        opcodes = sm.get_opcodes()
+        for tag, i1, i2, j1, j2 in opcodes:
+            if tag == 'insert':
+                if len(result_df) > 0:
+                    result_df.at[result_df.index[-1], '번역문'] += input_tgt_all[j1:j2]
+                else:
+                    result_df.loc[len(result_df)] = [df.shape[0], '', input_tgt_all[j1:j2], 1.0, 'integrity', 'tgt_patch']
+            elif tag == 'delete':
+                if len(result_df) > 0:
+                    last = result_df.at[result_df.index[-1], '번역문']
+                    result_df.at[result_df.index[-1], '번역문'] = last.replace(output_tgt_all[i1:i2], '', 1)
+    # 최종 재정렬(컬럼 순서 보장)
     result_df = result_df[final_columns]
     result_df.to_excel(output_file, index=False)
     print(f"💾 결과 저장: {output_file}")
